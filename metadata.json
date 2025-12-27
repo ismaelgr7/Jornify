@@ -1,0 +1,5 @@
+{
+  "name": "Jornify",
+  "description": "Una aplicación avanzada para el registro de jornada laboral, gestión de horas extra y control de acceso para empresas y empleados.",
+  "requestFramePermissions": []
+}
