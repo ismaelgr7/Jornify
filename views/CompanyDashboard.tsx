@@ -112,17 +112,22 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
         : employees.find(e => e.id === selectedEmployeeId)?.name || 'Empleado';
 
       // Find signatures if a specific employee is selected
-      let relevantSignatures = undefined;
-      if (selectedEmployeeId !== 'all') {
-        const start = new Date(dateRange.start);
-        const end = new Date(dateRange.end);
-        relevantSignatures = signatures.filter(s => {
-          const sDate = new Date(s.year, s.month, 1);
-          return s.employee_id === selectedEmployeeId &&
-            sDate >= new Date(start.getFullYear(), start.getMonth(), 1) &&
-            sDate <= new Date(end.getFullYear(), end.getMonth(), 1);
-        });
-      }
+      // Find signatures
+      let relevantSignatures = [];
+      const start = new Date(dateRange.start);
+      const end = new Date(dateRange.end);
+
+      relevantSignatures = signatures.filter(s => {
+        const sDate = new Date(s.year, s.month, 1);
+        const dateMatch = sDate >= new Date(start.getFullYear(), start.getMonth(), 1) &&
+          sDate <= new Date(end.getFullYear(), end.getMonth(), 1);
+
+        if (selectedEmployeeId === 'all') {
+          return dateMatch;
+        } else {
+          return dateMatch && s.employee_id === selectedEmployeeId;
+        }
+      });
 
       generatePDF(company.name, dateRange, filtered, employees, employeeName, relevantSignatures);
     } catch (e) {

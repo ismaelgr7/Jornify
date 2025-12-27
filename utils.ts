@@ -117,172 +117,184 @@ export const generatePDF = (
   records: any[],
   employees: any[],
   employeeName: string = 'Todos',
-  monthlySignatures?: { month: number; year: number; signature_data: string }[]
+  monthlySignatures?: { month: number; year: number; signature_data: string; employee_id: string }[]
 ) => {
-  console.log('--- JORNIFY PDF ENGINE v17.0 (Multi-Employee) ---');
+  console.log('--- JORNIFY PDF ENGINE v18.0 (Multi-Employee + Signatures) ---');
 
   try {
-    const doc = new jsPDF();
-    const vHash = generateVerificationHash(companyName, range, records);
-    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    // ... (rest of function setup) ...
 
-    // Group records by employee
-    const recordsByEmployee: Record<string, any[]> = {};
-    records.forEach(r => {
-      if (!recordsByEmployee[r.employee_id]) recordsByEmployee[r.employee_id] = [];
-      recordsByEmployee[r.employee_id].push(r);
-    });
+    // Inside map loop:
+    // const isSigned = monthlySignatures?.some(s => s.month === rMonth && s.year === rYear && s.employee_id === r.employee_id);
 
-    const employeeIds = Object.keys(recordsByEmployee);
 
-    if (employeeIds.length === 0) {
-      alert('No hay registros para generar el PDF.');
-      return;
-    }
+    try {
+      const doc = new jsPDF();
+      const vHash = generateVerificationHash(companyName, range, records);
+      const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-    employeeIds.forEach((empId, index) => {
-      // Add new page for subsequent employees
-      if (index > 0) doc.addPage();
+      // Group records by employee
+      const recordsByEmployee: Record<string, any[]> = {};
+      records.forEach(r => {
+        if (!recordsByEmployee[r.employee_id]) recordsByEmployee[r.employee_id] = [];
+        recordsByEmployee[r.employee_id].push(r);
+      });
 
-      const empRecords = recordsByEmployee[empId];
-      const currentEmployee = employees.find(e => e.id === empId);
-      const currentEmployeeName = currentEmployee?.full_name || 'Desconocido';
+      const employeeIds = Object.keys(recordsByEmployee);
 
-      // Header per employee
-      doc.setFontSize(18);
-      doc.text('REGISTRO MENSUAL DE JORNADA', 14, 20);
+      if (employeeIds.length === 0) {
+        alert('No hay registros para generar el PDF.');
+        return;
+      }
 
-      doc.setFontSize(10);
-      doc.text(`Empresa: ${companyName}`, 14, 30);
-      doc.text(`Trabajador: ${currentEmployeeName}`, 14, 35);
-      doc.text(`Periodo: ${formatDate(range.start)} - ${formatDate(range.end)}`, 14, 40);
-      doc.text(`ID Verificación: ${vHash}`, 14, 45); // Global hash for the batch
+      employeeIds.forEach((empId, index) => {
+        // Add new page for subsequent employees
+        if (index > 0) doc.addPage();
 
-      // Sort records for this employee
-      const sortedRecords = [...empRecords].sort((a, b) =>
-        new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-      );
+        const empRecords = recordsByEmployee[empId];
+        const currentEmployee = employees.find(e => e.id === empId);
+        const currentEmployeeName = currentEmployee?.full_name || 'Desconocido';
 
-      // Track weekly totals for this employee
-      const weeklyAccMinutes: Record<string, number> = {};
-      const getWeekKey = (dateStr: string) => {
-        const d = new Date(dateStr);
-        const { start } = getWeekRange(d);
-        return start.toISOString().split('T')[0];
-      };
+        // Header per employee
+        doc.setFontSize(18);
+        doc.text('REGISTRO MENSUAL DE JORNADA', 14, 20);
 
-      const tableRows = sortedRecords.map(r => {
-        const contractedWeeklyMinutes = (currentEmployee?.contracted_hours_per_week || 40) * 60;
-        const weekKey = getWeekKey(r.start_time);
-        const isBreak = r.type === 'break';
+        doc.setFontSize(10);
+        doc.text(`Empresa: ${companyName}`, 14, 30);
+        doc.text(`Trabajador: ${currentEmployeeName}`, 14, 35);
+        doc.text(`Periodo: ${formatDate(range.start)} - ${formatDate(range.end)}`, 14, 40);
+        doc.text(`ID Verificación: ${vHash}`, 14, 45); // Global hash for the batch
 
-        const recordDate = new Date(r.start_time);
-        const rMonth = recordDate.getMonth();
-        const rYear = recordDate.getFullYear();
-        // Check signatures (global list passed, might need filtering if signatures were per emp in DB but here we assume generic or mapped)
-        // Ideally signatures should be filtered by employee too if they are passed in `monthlySignatures`.
-        // Assuming `monthlySignatures` contains current employee's signatures if called for single, 
-        // BUT for 'Todos', we might be missing specific employee signature context if not passed correctly.
-        // For now, we use the passed signatures array as-is (best effort).
-        const isSigned = monthlySignatures?.some(s => s.month === rMonth && s.year === rYear);
+        // Sort records for this employee
+        const sortedRecords = [...empRecords].sort((a, b) =>
+          new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+        );
 
-        const currentWeekTotalBefore = weeklyAccMinutes[weekKey] || 0;
-        const duration = r.duration_minutes || 0;
+        // Track weekly totals for this employee
+        const weeklyAccMinutes: Record<string, number> = {};
+        const getWeekKey = (dateStr: string) => {
+          const d = new Date(dateStr);
+          const { start } = getWeekRange(d);
+          return start.toISOString().split('T')[0];
+        };
 
-        let extraMins = 0;
-        if (!isBreak) {
-          if (currentWeekTotalBefore >= contractedWeeklyMinutes) {
-            extraMins = duration;
-          } else if (currentWeekTotalBefore + duration > contractedWeeklyMinutes) {
-            extraMins = (currentWeekTotalBefore + duration) - contractedWeeklyMinutes;
+        const tableRows = sortedRecords.map(r => {
+          const contractedWeeklyMinutes = (currentEmployee?.contracted_hours_per_week || 40) * 60;
+          const weekKey = getWeekKey(r.start_time);
+          const isBreak = r.type === 'break';
+
+          const recordDate = new Date(r.start_time);
+          const rMonth = recordDate.getMonth();
+          const rYear = recordDate.getFullYear();
+          // Check signatures (global list passed, might need filtering if signatures were per emp in DB but here we assume generic or mapped)
+          // Ideally signatures should be filtered by employee too if they are passed in `monthlySignatures`.
+          // Assuming `monthlySignatures` contains current employee's signatures if called for single, 
+          // BUT for 'Todos', we might be missing specific employee signature context if not passed correctly.
+          // For now, we use the passed signatures array as-is (best effort).
+          // Check signatures matching month, year AND employee_id
+          const isSigned = monthlySignatures?.some(s =>
+            s.month === rMonth &&
+            s.year === rYear &&
+            s.employee_id === r.employee_id
+          );
+
+          const currentWeekTotalBefore = weeklyAccMinutes[weekKey] || 0;
+          const duration = r.duration_minutes || 0;
+
+          let extraMins = 0;
+          if (!isBreak) {
+            if (currentWeekTotalBefore >= contractedWeeklyMinutes) {
+              extraMins = duration;
+            } else if (currentWeekTotalBefore + duration > contractedWeeklyMinutes) {
+              extraMins = (currentWeekTotalBefore + duration) - contractedWeeklyMinutes;
+            }
+            weeklyAccMinutes[weekKey] = currentWeekTotalBefore + duration;
           }
-          weeklyAccMinutes[weekKey] = currentWeekTotalBefore + duration;
-        }
 
-        const signatureBlock = isSigned ? 'Firmado Digitalmente' : '________________';
-        const notesBlock = r.notes ? ` [Nota: ${r.notes}]` : '';
+          const signatureBlock = isSigned ? 'Firmado Digitalmente' : '________________';
+          const notesBlock = r.notes ? ` [Nota: ${r.notes}]` : '';
 
-        return [
-          formatDate(r.start_time),
-          `${formatTime(r.start_time)} ${isBreak ? '(Pausa)' : ''}`,
-          r.end_time ? formatTime(r.end_time) : '-',
-          isBreak ? `(${formatDuration(duration)})` : formatDuration(duration),
-          isBreak ? '00:00' : (extraMins > 0 ? formatDuration(extraMins) : '00:00'),
-          signatureBlock + notesBlock
-        ];
+          return [
+            formatDate(r.start_time),
+            `${formatTime(r.start_time)} ${isBreak ? '(Pausa)' : ''}`,
+            r.end_time ? formatTime(r.end_time) : '-',
+            isBreak ? `(${formatDuration(duration)})` : formatDuration(duration),
+            isBreak ? '00:00' : (extraMins > 0 ? formatDuration(extraMins) : '00:00'),
+            signatureBlock + notesBlock
+          ];
+        });
+
+        autoTable(doc, {
+          startY: 55,
+          head: [['Fecha', 'Entrada', 'Salida', 'Horas', 'Extra', 'Observaciones/Firma']],
+          body: tableRows,
+          theme: 'striped',
+          headStyles: { fillColor: [31, 41, 55], textColor: 255 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          margin: { top: 55 }
+        });
+
+        // Footer & Signatures
+        let currentY = (doc as any).lastAutoTable?.finalY || 150;
+        currentY += 10;
+
+        // Draw signatures if available (and applicable)
+        // Note: Passing 'monthlySignatures' for ALL employees implies it contains ALL signatures.
+        // However the current type signature doesn't associate sigs with IDs. 
+        // User context: "Company Dashboard" likely doesn't have all signatures loaded for all employees in the "All" view usually.
+        // We will fallback to blank lines if no matching signature.
+
+        doc.setFontSize(10);
+        doc.text('Firma del Trabajador: ___________________________', 14, currentY + 15);
+
+        // We removed the complex digital signature rendering for "All Employees" batch 
+        // because mapping them without ID in the struct is risky. 
+        // Individual reports still work perfectly.
+
+        currentY += 25;
+
+        doc.setFontSize(8);
+        currentY += 5;
+        if (currentY + 15 > 280) { doc.addPage(); currentY = 20; }
+
+        doc.text('Este documento sirve como registro oficial de jornada según el Real Decreto-ley 8/2019.', 14, currentY);
+
+        const integrityCode = sortedRecords[sortedRecords.length - 1]?.row_hash?.substring(0, 16).toUpperCase() || vHash;
+        doc.text(`Código de Integridad (SHA-256): ${integrityCode} | Jornify.io`, 14, currentY + 5);
       });
 
-      autoTable(doc, {
-        startY: 55,
-        head: [['Fecha', 'Entrada', 'Salida', 'Horas', 'Extra', 'Observaciones/Firma']],
-        body: tableRows,
-        theme: 'striped',
-        headStyles: { fillColor: [31, 41, 55], textColor: 255 },
-        styles: { fontSize: 8, cellPadding: 2 },
-        margin: { top: 55 }
-      });
+      const fileName = `registro_${sanitizeFilename(companyName)}_completo.pdf`;
+      doc.save(fileName);
 
-      // Footer & Signatures
-      let currentY = (doc as any).lastAutoTable?.finalY || 150;
-      currentY += 10;
+      console.log('--- PDF v17.0 SUCCESS ---');
 
-      // Draw signatures if available (and applicable)
-      // Note: Passing 'monthlySignatures' for ALL employees implies it contains ALL signatures.
-      // However the current type signature doesn't associate sigs with IDs. 
-      // User context: "Company Dashboard" likely doesn't have all signatures loaded for all employees in the "All" view usually.
-      // We will fallback to blank lines if no matching signature.
+    } catch (err: any) {
+      console.error('FATAL PDF ERROR:', err);
+      // Emergency Fallback: If AutoTable fails, download a basic version
+      emergencyMinimalPDF(companyName, range, records, employeeName);
+    }
+  };
 
+  const emergencyMinimalPDF = (companyName: string, range: { start: string; end: string }, records: any[], employeeName: string) => {
+    try {
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('REGISTRO DE JORNADA (MODO EMERGENCIA)', 14, 20);
       doc.setFontSize(10);
-      doc.text('Firma del Trabajador: ___________________________', 14, currentY + 15);
+      doc.text(`Empresa: ${companyName} | Trabajador: ${employeeName}`, 14, 30);
+      doc.text(`Periodo: ${formatDate(range.start)} - ${formatDate(range.end)}`, 14, 35);
 
-      // We removed the complex digital signature rendering for "All Employees" batch 
-      // because mapping them without ID in the struct is risky. 
-      // Individual reports still work perfectly.
+      let y = 50;
+      records.forEach(r => {
+        doc.text(`${formatDate(r.start_time)} | ${formatTime(r.start_time)} - ${r.end_time ? formatTime(r.end_time) : '-'}`, 14, y);
+        y += 6;
+        if (y > 280) { doc.addPage(); y = 20; }
+      });
 
-      currentY += 25;
-
-      doc.setFontSize(8);
-      currentY += 5;
-      if (currentY + 15 > 280) { doc.addPage(); currentY = 20; }
-
-      doc.text('Este documento sirve como registro oficial de jornada según el Real Decreto-ley 8/2019.', 14, currentY);
-
-      const integrityCode = sortedRecords[sortedRecords.length - 1]?.row_hash?.substring(0, 16).toUpperCase() || vHash;
-      doc.text(`Código de Integridad (SHA-256): ${integrityCode} | Jornify.io`, 14, currentY + 5);
-    });
-
-    const fileName = `registro_${sanitizeFilename(companyName)}_completo.pdf`;
-    doc.save(fileName);
-
-    console.log('--- PDF v17.0 SUCCESS ---');
-
-  } catch (err: any) {
-    console.error('FATAL PDF ERROR:', err);
-    // Emergency Fallback: If AutoTable fails, download a basic version
-    emergencyMinimalPDF(companyName, range, records, employeeName);
-  }
-};
-
-const emergencyMinimalPDF = (companyName: string, range: { start: string; end: string }, records: any[], employeeName: string) => {
-  try {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text('REGISTRO DE JORNADA (MODO EMERGENCIA)', 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Empresa: ${companyName} | Trabajador: ${employeeName}`, 14, 30);
-    doc.text(`Periodo: ${formatDate(range.start)} - ${formatDate(range.end)}`, 14, 35);
-
-    let y = 50;
-    records.forEach(r => {
-      doc.text(`${formatDate(r.start_time)} | ${formatTime(r.start_time)} - ${r.end_time ? formatTime(r.end_time) : '-'}`, 14, y);
-      y += 6;
-      if (y > 280) { doc.addPage(); y = 20; }
-    });
-
-    doc.save(`registro_emergencia_${Date.now()}.pdf`);
-  } catch (e) {
-    alert('Failed to generate even emergency PDF.');
-  }
-};
+      doc.save(`registro_emergencia_${Date.now()}.pdf`);
+    } catch (e) {
+      alert('Failed to generate even emergency PDF.');
+    }
+  };
 
 
