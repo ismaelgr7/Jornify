@@ -20,6 +20,14 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all');
   const [isLoadingStripe, setIsLoadingStripe] = useState(false);
+  const [showBillingSettings, setShowBillingSettings] = useState(false);
+  const [taxInfo, setTaxInfo] = useState({
+    taxId: '',
+    line1: '',
+    city: '',
+    postalCode: ''
+  });
+  const [isSavingTax, setIsSavingTax] = useState(false);
 
   const getWeeklyHours = (employeeId: string) => {
     const { start, end } = getWeekRange();
@@ -198,8 +206,129 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
 
   const activeEmployeesCount = employees.filter(e => getStatus(e.id) === 'Fichado').length;
 
+  const handleUpdateTaxInfo = async () => {
+    if (!taxInfo.taxId || !taxInfo.line1 || !taxInfo.city || !taxInfo.postalCode) {
+      alert('Por favor, rellena todos los campos fiscales.');
+      return;
+    }
+
+    setIsSavingTax(true);
+    try {
+      const { error } = await supabase.functions.invoke('update-customer-tax', {
+        body: {
+          companyId: company.id,
+          taxId: taxInfo.taxId,
+          address: {
+            line1: taxInfo.line1,
+            city: taxInfo.city,
+            postal_code: taxInfo.postalCode,
+            country: 'ES' // Default for now
+          }
+        }
+      });
+
+      if (error) throw error;
+      alert('Datos fiscales actualizados correctamente. Tus facturas ahora incluirán esta información.');
+      setShowBillingSettings(false);
+    } catch (e: any) {
+      console.error(e);
+      alert('Error: ' + (e.message || 'No se pudieron actualizar los datos fiscales.'));
+    } finally {
+      setIsSavingTax(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Billing & Tax Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Panel de Control</h1>
+          <p className="text-slate-500 font-medium">Gestiona tu equipo y facturación desde un solo lugar.</p>
+        </div>
+        <button
+          onClick={() => setShowBillingSettings(!showBillingSettings)}
+          className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold shadow-sm hover:bg-slate-50 transition-all text-sm"
+        >
+          <Building size={18} className="text-blue-500" />
+          {showBillingSettings ? 'Cerrar Ajustes Fiscales' : 'Configurar Facturación (NIF/CIF)'}
+        </button>
+      </div>
+
+      {showBillingSettings && (
+        <div className="bg-blue-50 border border-blue-100 rounded-3xl p-8 mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-blue-600 rounded-lg text-white">
+              <ShieldCheck size={20} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900">Datos Fiscales para Deducción</h3>
+          </div>
+          <p className="text-slate-600 mb-8 text-sm max-w-2xl">
+            Completa estos datos para que tus facturas de Jornify sean legalmente deducibles. Una vez guardados, podrás descargar todas tus facturas con NIF y dirección desde el portal de Stripe.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">NIF / CIF de Empresa</label>
+              <input
+                type="text"
+                placeholder="B12345678"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                value={taxInfo.taxId}
+                onChange={(e) => setTaxInfo({ ...taxInfo, taxId: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2 lg:col-span-1">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Dirección Fiscal</label>
+              <input
+                type="text"
+                placeholder="Calle Ejemplo 123"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                value={taxInfo.line1}
+                onChange={(e) => setTaxInfo({ ...taxInfo, line1: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Ciudad</label>
+              <input
+                type="text"
+                placeholder="Madrid"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                value={taxInfo.city}
+                onChange={(e) => setTaxInfo({ ...taxInfo, city: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Código Postal</label>
+              <input
+                type="text"
+                placeholder="28001"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                value={taxInfo.postalCode}
+                onChange={(e) => setTaxInfo({ ...taxInfo, postalCode: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-blue-100 flex justify-end items-center gap-4">
+            <button
+              onClick={() => setShowBillingSettings(false)}
+              className="text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              Cerrar sin guardar
+            </button>
+            <button
+              onClick={handleUpdateTaxInfo}
+              disabled={isSavingTax}
+              className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSavingTax && <Clock size={16} className="animate-spin" />}
+              {isSavingTax ? 'Guardando...' : 'Guardar Datos Fiscales'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
