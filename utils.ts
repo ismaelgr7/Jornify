@@ -250,9 +250,25 @@ export const generatePDF = (
       currentY += 10;
 
       doc.setFontSize(10);
-      doc.text('Firma del Trabajador: ___________________________', 14, currentY + 15);
+      doc.text('Firma del Trabajador:', 14, currentY + 15);
 
-      currentY += 25;
+      // Render actual signature image if exists for this employee
+      const empSignature = monthlySignatures?.find(s => s.employee_id === empId);
+      if (empSignature?.signature_data) {
+        try {
+          // Drawing signature image - usually base64
+          doc.addImage(empSignature.signature_data, 'PNG', 14, currentY + 18, 50, 20);
+          doc.setFontSize(7);
+          doc.text('Firmado Digitalmente el primer día del registro', 14, currentY + 40);
+        } catch (sigErr) {
+          console.warn('Could not render signature image:', sigErr);
+          doc.text('___________________________', 55, currentY + 15);
+        }
+      } else {
+        doc.text('___________________________', 55, currentY + 15);
+      }
+
+      currentY += 45;
 
       doc.setFontSize(8);
       currentY += 5;
