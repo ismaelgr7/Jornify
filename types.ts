@@ -9,6 +9,7 @@ export interface Company {
   subscription_status?: 'trialing' | 'active' | 'past_due' | 'canceled';
   subscription_id?: string;
   trial_end?: string;
+  created_at?: string;
 }
 
 export interface Employee {

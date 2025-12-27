@@ -118,6 +118,20 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
   };
 
   const handleToggleWork = () => {
+    // Subscription / Trial enforcement
+    const creationDate = company?.created_at ? new Date(company.created_at) : new Date();
+    const trialEndDate = new Date(creationDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const isWithinInitialTrial = now <= trialEndDate;
+    const hasActiveSubscription = company?.subscription_status === 'active' || company?.subscription_status === 'trialing';
+
+    if (!isWithinInitialTrial && !hasActiveSubscription) {
+      if (!activeRecord) {
+        alert('El periodo de prueba de Jornify para tu empresa ha finalizado. Por favor, pide al administrador que active la suscripción para continuar registrando la jornada.');
+        return;
+      }
+    }
+
     if (activeRecord) {
       const endTime = new Date().toISOString();
       const updatedRecord: TimeRecord = {

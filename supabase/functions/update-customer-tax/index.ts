@@ -29,15 +29,40 @@ serve(async (req) => {
         // 1. Get company details
         const { data: company, error: fetchError } = await supabase
             .from('companies')
-            .select('stripe_customer_id')
+            .select('id, name, email, stripe_customer_id')
             .eq('id', companyId)
             .single()
 
-        if (fetchError || !company?.stripe_customer_id) {
-            throw new Error(`Empresa no encontrada: ${fetchError?.message || 'Sin ID de Stripe'}`)
+        if (fetchError || !company) {
+            throw new Error(`Empresa no encontrada: ${fetchError?.message || 'Error desconocido'}`)
         }
 
-        const customerId = company.stripe_customer_id
+        let customerId = company.stripe_customer_id
+
+        // 1.1 If missing ID, try to find or create
+        if (!customerId) {
+            console.log(`Company ${companyId} missing Stripe ID. Searching by email: ${company.email}`)
+            const existing = await stripe.customers.list({ email: company.email, limit: 1 })
+
+            if (existing.data.length > 0) {
+                customerId = existing.data[0].id
+                console.log(`Found existing Stripe customer: ${customerId}`)
+            } else {
+                const newCustomer = await stripe.customers.create({
+                    email: company.email,
+                    name: company.name,
+                    metadata: { company_id: companyId }
+                })
+                customerId = newCustomer.id
+                console.log(`Created new Stripe customer: ${customerId}`)
+            }
+
+            // Update local DB
+            await supabase
+                .from('companies')
+                .update({ stripe_customer_id: customerId })
+                .eq('id', companyId)
+        }
 
         // 2. Step-by-step updates for better error reporting
         const results: any = { address: 'pending', taxId: 'pending' }

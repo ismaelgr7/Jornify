@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Company, Employee, TimeRecord } from '../types';
 import { jsPDF } from 'jspdf';
 import { formatDate, formatDuration, generatePDF, getWeekRange } from '../utils';
-import { Users, Briefcase, FileText, Edit2, Calendar, Clock, AlertTriangle, CheckCircle2, Search, Building, User, Bell, CreditCard, ShieldCheck, Trash2 } from 'lucide-react';
+import { Users, Briefcase, FileText, Edit2, Calendar, Clock, AlertTriangle, CheckCircle2, Search, Building, User, Bell, CreditCard, ShieldCheck, Trash2, Lock } from 'lucide-react';
 import { supabase } from '../supabase';
 import { createCheckoutSession, createPortalSession } from '../stripeUtils';
 
@@ -238,8 +238,82 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
     }
   };
 
+  // Calculate trial status based on creation date
+  const creationDate = company.created_at ? new Date(company.created_at) : new Date();
+  const trialEndDate = new Date(creationDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const isWithinInitialTrial = now <= trialEndDate;
+  const hasActiveSubscription = company.subscription_status === 'active' || company.subscription_status === 'trialing';
+  const isBlocked = !isWithinInitialTrial && !hasActiveSubscription;
+
+  if (isBlocked) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl shadow-blue-100 border border-blue-50 p-8 text-center animate-in fade-in zoom-in duration-500">
+          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-blue-200 rotate-3">
+            <Lock size={40} className="text-white" />
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Tu periodo de prueba ha finalizado</h2>
+          <p className="text-slate-500 mb-8 font-medium leading-relaxed">
+            Esperamos que estos 14 días te hayan ayudado a ver lo fácil que es gestionar tu equipo con Jornify. Para seguir cumpliendo con la ley de registro horario, activa tu suscripción.
+          </p>
+
+          <div className="space-y-4 mb-8 text-left">
+            <div className="flex items-center gap-3 text-sm text-slate-600 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <CheckCircle2 size={18} className="text-green-500" />
+              <span>Conserva todos tus registros previos</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-slate-600 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <CheckCircle2 size={18} className="text-green-500" />
+              <span>Alta de empleados ilimitada</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-slate-600 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <CheckCircle2 size={18} className="text-green-500" />
+              <span>Informes PDF legales al instante</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSubscription}
+            disabled={isLoadingStripe}
+            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3"
+          >
+            {isLoadingStripe ? <Clock size={20} className="animate-spin" /> : <CreditCard size={20} />}
+            {isLoadingStripe ? 'Conectando...' : 'Activar Suscripción'}
+          </button>
+
+          <p className="mt-6 text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+            Pago seguro procesado por Stripe
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Trial Status Notice */}
+      {!hasActiveSubscription && isWithinInitialTrial && (
+        <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl mb-8 flex items-center justify-between gap-4 animate-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-3 text-blue-800">
+            <ShieldCheck size={24} className="text-blue-500" />
+            <div>
+              <p className="text-sm font-bold">Estás en periodo de prueba gratuito</p>
+              <p className="text-xs font-medium opacity-80">
+                Te quedan <span className="font-bold">{Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))} días</span> de acceso total. No olvides activar tu suscripción definitiva.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleSubscription}
+            className="whitespace-nowrap bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100"
+          >
+            Activar Ahora
+          </button>
+        </div>
+      )}
+
       {/* Billing & Tax Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
