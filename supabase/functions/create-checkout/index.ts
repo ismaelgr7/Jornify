@@ -18,11 +18,13 @@ serve(async (req) => {
     }
 
     try {
-        const { companyId, companyEmail, employeeCount } = await req.json()
+        const { companyId, companyEmail, employeeCount, returnUrl } = await req.json()
 
         if (!companyId || !companyEmail || !employeeCount) {
             throw new Error('Missing required fields')
         }
+
+        const origin = returnUrl || req.headers.get('origin'); // Fallback
 
         // Create Stripe Checkout Session
         const session = await stripe.checkout.sessions.create({
@@ -41,8 +43,8 @@ serve(async (req) => {
                 },
             },
             customer_email: companyEmail,
-            success_url: `${req.headers.get('origin')}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${req.headers.get('origin')}/dashboard`,
+            success_url: `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${origin}/dashboard`,
             metadata: {
                 company_id: companyId,
             },

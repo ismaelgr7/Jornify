@@ -23,6 +23,7 @@ export async function createCheckoutSession(
             companyId,
             companyEmail,
             employeeCount,
+            returnUrl: window.location.origin, // Send current origin explicitly
         }),
     });
 
