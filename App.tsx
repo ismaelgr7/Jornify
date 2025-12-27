@@ -89,7 +89,14 @@ const App: React.FC = () => {
       await fetchData();
       const savedAuth = localStorage.getItem(STORAGE_KEYS.AUTH);
       if (savedAuth) {
-        setAuth(JSON.parse(savedAuth));
+        const parsed = JSON.parse(savedAuth);
+        // Refresh the user data from the live data we just fetched
+        if (parsed.role === 'company') {
+          // This will be updated by the useEffect below too, but let's do it here for immediate effect
+          setAuth(parsed);
+        } else {
+          setAuth(parsed);
+        }
       }
       setLoading(false);
     };
@@ -119,6 +126,27 @@ const App: React.FC = () => {
       supabase.removeChannel(signaturesSub);
     };
   }, []);
+
+  // Synchronize auth.user with the live companies/employees data
+  useEffect(() => {
+    if (auth.user && auth.role) {
+      if (auth.role === 'company') {
+        const liveComp = companies.find(c => c.id === auth.user?.id);
+        if (liveComp && (
+          liveComp.tax_id !== (auth.user as Company).tax_id ||
+          liveComp.subscription_status !== (auth.user as Company).subscription_status ||
+          liveComp.address_line1 !== (auth.user as Company).address_line1
+        )) {
+          setAuth(prev => ({ ...prev, user: liveComp }));
+        }
+      } else {
+        const liveEmp = employees.find(e => e.id === auth.user?.id);
+        if (liveEmp && JSON.stringify(liveEmp) !== JSON.stringify(auth.user)) {
+          setAuth(prev => ({ ...prev, user: liveEmp }));
+        }
+      }
+    }
+  }, [companies, employees, auth.role, auth.user?.id]);
 
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEYS.AUTH);
