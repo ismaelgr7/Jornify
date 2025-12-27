@@ -16,7 +16,10 @@ serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
-        const { companyId, taxId, address } = await req.json()
+        const body = await req.json()
+        const { companyId, taxId, address } = body
+
+        if (!companyId) throw new Error('Falta el ID de la empresa')
 
         const supabase = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
@@ -31,41 +34,64 @@ serve(async (req) => {
             .single()
 
         if (fetchError || !company?.stripe_customer_id) {
-            throw new Error('Empresa no encontrada o sin ID de Stripe')
+            throw new Error(`Empresa no encontrada: ${fetchError?.message || 'Sin ID de Stripe'}`)
         }
 
-        // 2. Update Stripe Customer Address
-        await stripe.customers.update(company.stripe_customer_id, {
-            address: address, // Expect { line1, city, state, postal_code, country }
-        })
+        const customerId = company.stripe_customer_id
 
-        // 3. Add/Update Tax ID (NIF/VAT)
+        // 2. Step-by-step updates for better error reporting
+        const results: any = { address: 'pending', taxId: 'pending' }
+
+        // 2.1 Update Address
+        try {
+            if (address) {
+                await stripe.customers.update(customerId, {
+                    address: {
+                        line1: address.line1,
+                        city: address.city,
+                        postal_code: address.postal_code,
+                        country: 'ES', // Explicitly ES for Spanish tax IDs to work
+                    }
+                })
+                results.address = 'success'
+            }
+        } catch (addrErr) {
+            results.address = `error: ${addrErr.message}`
+        }
+
+        // 2.2 Update Tax ID
         if (taxId) {
-            // First list existing to avoid duplicates if possible, or just try catch
+            let formattedTaxId = taxId.trim().toUpperCase();
+            // Prefix with ES if missing and looks like a NIF/CIF
+            if (!formattedTaxId.startsWith('ES')) {
+                formattedTaxId = 'ES' + formattedTaxId;
+            }
+
             try {
-                const taxIds = await stripe.customers.listTaxIds(company.stripe_customer_id)
-                // If it already exists, skip. Otherwise create.
-                if (!taxIds.data.some(t => t.value.toUpperCase() === taxId.toUpperCase())) {
-                    await stripe.customers.createTaxId(company.stripe_customer_id, {
-                        type: 'eu_vat', // Suitable for Spain. For generic NIF, Stripe often handles via address/metadata
-                        value: taxId,
+                const taxIds = await stripe.customers.listTaxIds(customerId)
+                if (!taxIds.data.some(t => t.value.toUpperCase() === formattedTaxId)) {
+                    await stripe.customers.createTaxId(customerId, {
+                        type: 'eu_vat',
+                        value: formattedTaxId,
                     })
                 }
-            } catch (e) {
-                console.warn('Error adding tax ID:', e.message)
-                // Note: 'eu_vat' might fail if the ID is strictly a local NIF not registered in VIES.
-                // Fallback: Add to metadata for manual invoice handling if Stripe's stricter validation blocks it.
-                await stripe.customers.update(company.stripe_customer_id, {
+                results.taxId = 'success'
+            } catch (taxErr) {
+                results.taxId = `error: ${taxErr.message}`
+                // Fallback to metadata so it's at least saved
+                await stripe.customers.update(customerId, {
                     metadata: { tax_id_manual: taxId }
                 })
             }
         }
 
-        return new Response(JSON.stringify({ success: true }), {
+        return new Response(JSON.stringify({ success: true, results }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
         })
 
     } catch (err) {
+        console.error('Function error:', err.message)
         return new Response(JSON.stringify({ error: err.message }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
