@@ -22,10 +22,10 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
   const [isLoadingStripe, setIsLoadingStripe] = useState(false);
   const [showBillingSettings, setShowBillingSettings] = useState(false);
   const [taxInfo, setTaxInfo] = useState({
-    taxId: '',
-    line1: '',
-    city: '',
-    postalCode: ''
+    taxId: company.tax_id || '',
+    line1: company.address_line1 || '',
+    city: company.address_city || '',
+    postalCode: company.address_postal_code || ''
   });
   const [isSavingTax, setIsSavingTax] = useState(false);
 
@@ -214,6 +214,20 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
 
     setIsSavingTax(true);
     try {
+      // 1. Update Supabase for persistence
+      const { error: dbError } = await supabase
+        .from('companies')
+        .update({
+          tax_id: taxInfo.taxId,
+          address_line1: taxInfo.line1,
+          address_city: taxInfo.city,
+          address_postal_code: taxInfo.postalCode
+        })
+        .eq('id', company.id);
+
+      if (dbError) throw dbError;
+
+      // 2. Sync with Stripe
       const { error } = await supabase.functions.invoke('update-customer-tax', {
         body: {
           companyId: company.id,
@@ -222,7 +236,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
             line1: taxInfo.line1,
             city: taxInfo.city,
             postal_code: taxInfo.postalCode,
-            country: 'ES' // Default for now
+            country: 'ES'
           }
         }
       });

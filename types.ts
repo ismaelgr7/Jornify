@@ -10,6 +10,10 @@ export interface Company {
   subscription_id?: string;
   trial_end?: string;
   created_at?: string;
+  tax_id?: string;
+  address_line1?: string;
+  address_city?: string;
+  address_postal_code?: string;
 }
 
 export interface Employee {

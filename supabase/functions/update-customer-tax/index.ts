@@ -93,20 +93,38 @@ serve(async (req) => {
             }
 
             try {
+                // Determine tax ID type for Spain
+                // if it starts with ES and followed by 8 or 9 chars, it's likely a VAT/NIF
                 const taxIds = await stripe.customers.listTaxIds(customerId)
-                if (!taxIds.data.some(t => t.value.toUpperCase() === formattedTaxId)) {
-                    await stripe.customers.createTaxId(customerId, {
-                        type: 'eu_vat',
-                        value: formattedTaxId,
-                    })
+
+                // Clear old ones to avoid duplicates or conflicts if they are changing it
+                for (const t of taxIds.data) {
+                    await stripe.customers.deleteTaxId(customerId, t.id)
                 }
+
+                await stripe.customers.createTaxId(customerId, {
+                    type: 'eu_vat',
+                    value: formattedTaxId,
+                })
                 results.taxId = 'success'
             } catch (taxErr) {
+                console.error(`Tax ID Error for ${formattedTaxId}:`, taxErr.message)
                 results.taxId = `error: ${taxErr.message}`
-                // Fallback to metadata so it's at least saved
-                await stripe.customers.update(customerId, {
-                    metadata: { tax_id_manual: taxId }
-                })
+
+                // If it fails (likely due to VIES validation for non-ROI companies)
+                // We use 'metadata' and we should also try to set it in the 'description' of future invoices
+                // or just accept that Stripe is strict. Actually, for Spain, 'es_cif' is a valid type too.
+                try {
+                    await stripe.customers.createTaxId(customerId, {
+                        type: 'es_cif', // Fallback to specific Spanish CIF type
+                        value: taxId.trim().toUpperCase(),
+                    })
+                    results.taxId = 'success (es_cif)'
+                } catch (cifErr) {
+                    await stripe.customers.update(customerId, {
+                        metadata: { tax_id_manual: taxId }
+                    })
+                }
             }
         }
 
