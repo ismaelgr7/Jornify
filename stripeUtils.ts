@@ -9,7 +9,8 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || supabaseUrl;
 export async function createCheckoutSession(
     companyId: string,
     companyEmail: string,
-    employeeCount: number
+    employeeCount: number,
+    stripeCustomerId?: string
 ): Promise<string> {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -23,7 +24,8 @@ export async function createCheckoutSession(
             companyId,
             companyEmail,
             employeeCount,
-            returnUrl: window.location.origin, // Send current origin explicitly
+            returnUrl: window.location.origin,
+            stripeCustomerId, // Include the ID to ensure customer reuse
         }),
     });
 

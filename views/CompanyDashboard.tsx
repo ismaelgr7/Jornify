@@ -168,7 +168,8 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
         const url = await createCheckoutSession(
           company.id,
           company.email,
-          employees.length
+          employees.length,
+          company.stripe_customer_id
         );
         window.location.href = url;
       }

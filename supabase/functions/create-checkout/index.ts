@@ -18,7 +18,7 @@ serve(async (req) => {
     }
 
     try {
-        const { companyId, companyEmail, employeeCount, returnUrl } = await req.json()
+        const { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId } = await req.json()
 
         if (!companyId || !companyEmail || !employeeCount) {
             throw new Error('Missing required fields')
@@ -27,7 +27,7 @@ serve(async (req) => {
         const origin = returnUrl || req.headers.get('origin'); // Fallback
 
         // Create Stripe Checkout Session
-        const session = await stripe.checkout.sessions.create({
+        const sessionOptions: any = {
             mode: 'subscription',
             payment_method_types: ['card'],
             line_items: [
@@ -37,18 +37,28 @@ serve(async (req) => {
                 },
             ],
             subscription_data: {
-                trial_period_days: 14, // Trial de 14 días
                 metadata: {
                     company_id: companyId,
                 },
             },
-            customer_email: companyEmail,
+            tax_id_collection: {
+                enabled: true,
+            },
             success_url: `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/dashboard`,
             metadata: {
                 company_id: companyId,
             },
-        })
+        }
+
+        // Use existing customer if provided, otherwise use email to let Stripe find/create
+        if (stripeCustomerId) {
+            sessionOptions.customer = stripeCustomerId;
+        } else {
+            sessionOptions.customer_email = companyEmail;
+        }
+
+        const session = await stripe.checkout.sessions.create(sessionOptions)
 
         return new Response(
             JSON.stringify({ url: session.url }),
