@@ -17,7 +17,7 @@ serve(async (req) => {
 
     try {
         const body = await req.json()
-        const { companyId, taxId, address } = body
+        const { companyId, taxId, address, fiscalName } = body
 
         if (!companyId) throw new Error('Falta el ID de la empresa')
 
@@ -50,7 +50,7 @@ serve(async (req) => {
             } else {
                 const newCustomer = await stripe.customers.create({
                     email: company.email,
-                    name: company.name,
+                    name: fiscalName || company.name,
                     metadata: { company_id: companyId }
                 })
                 customerId = newCustomer.id
@@ -65,7 +65,19 @@ serve(async (req) => {
         }
 
         // 2. Step-by-step updates for better error reporting
-        const results: any = { address: 'pending', taxId: 'pending' }
+        const results: any = { address: 'pending', taxId: 'pending', name: 'pending' }
+
+        // 2.0 Update Name (Fiscal Name)
+        try {
+            if (fiscalName || company.name) {
+                await stripe.customers.update(customerId, {
+                    name: fiscalName || company.name
+                })
+                results.name = 'success'
+            }
+        } catch (nameErr) {
+            results.name = `error: ${nameErr.message}`
+        }
 
         // 2.1 Update Address
         try {
@@ -74,8 +86,9 @@ serve(async (req) => {
                     address: {
                         line1: address.line1,
                         city: address.city,
+                        state: address.state,
                         postal_code: address.postal_code,
-                        country: 'ES', // Explicitly ES for Spanish tax IDs to work
+                        country: 'ES',
                     }
                 })
                 results.address = 'success'

@@ -135,7 +135,9 @@ const App: React.FC = () => {
         if (liveComp && (
           liveComp.tax_id !== (auth.user as Company).tax_id ||
           liveComp.subscription_status !== (auth.user as Company).subscription_status ||
-          liveComp.address_line1 !== (auth.user as Company).address_line1
+          liveComp.address_line1 !== (auth.user as Company).address_line1 ||
+          liveComp.address_state !== (auth.user as Company).address_state ||
+          liveComp.fiscal_name !== (auth.user as Company).fiscal_name
         )) {
           setAuth(prev => ({ ...prev, user: liveComp }));
         }

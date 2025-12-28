@@ -44,6 +44,9 @@ serve(async (req) => {
             tax_id_collection: {
                 enabled: true,
             },
+            automatic_tax: {
+                enabled: true,
+            },
             success_url: `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/dashboard`,
             metadata: {

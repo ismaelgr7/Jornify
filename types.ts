@@ -13,7 +13,9 @@ export interface Company {
   tax_id?: string;
   address_line1?: string;
   address_city?: string;
+  address_state?: string;
   address_postal_code?: string;
+  fiscal_name?: string;
 }
 
 export interface Employee {

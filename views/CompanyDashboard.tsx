@@ -25,7 +25,9 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
     taxId: company.tax_id || '',
     line1: company.address_line1 || '',
     city: company.address_city || '',
-    postalCode: company.address_postal_code || ''
+    state: company.address_state || '',
+    postalCode: company.address_postal_code || '',
+    fiscalName: company.fiscal_name || company.name || ''
   });
   const [isSavingTax, setIsSavingTax] = useState(false);
 
@@ -222,7 +224,9 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
           tax_id: taxInfo.taxId,
           address_line1: taxInfo.line1,
           address_city: taxInfo.city,
-          address_postal_code: taxInfo.postalCode
+          address_state: taxInfo.state,
+          address_postal_code: taxInfo.postalCode,
+          fiscal_name: taxInfo.fiscalName
         })
         .eq('id', company.id);
 
@@ -233,9 +237,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
         body: {
           companyId: company.id,
           taxId: taxInfo.taxId,
+          fiscalName: taxInfo.fiscalName,
           address: {
             line1: taxInfo.line1,
             city: taxInfo.city,
+            state: taxInfo.state,
             postal_code: taxInfo.postalCode,
             country: 'ES'
           }
@@ -357,45 +363,69 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">NIF / CIF de Empresa</label>
-              <input
-                type="text"
-                placeholder="B12345678"
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                value={taxInfo.taxId}
-                onChange={(e) => setTaxInfo({ ...taxInfo, taxId: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2 lg:col-span-1">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Dirección Fiscal</label>
-              <input
-                type="text"
-                placeholder="Calle Ejemplo 123"
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                value={taxInfo.line1}
-                onChange={(e) => setTaxInfo({ ...taxInfo, line1: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Ciudad</label>
-              <input
-                type="text"
-                placeholder="Madrid"
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                value={taxInfo.city}
-                onChange={(e) => setTaxInfo({ ...taxInfo, city: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Código Postal</label>
-              <input
-                type="text"
-                placeholder="28001"
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                value={taxInfo.postalCode}
-                onChange={(e) => setTaxInfo({ ...taxInfo, postalCode: e.target.value })}
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold block mb-1.5 ml-1 text-[10px] tracking-wider">Nombre o Razón Social</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm p-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  placeholder="Ej: Juan Pérez o Mi Empresa S.L."
+                  value={taxInfo.fiscalName}
+                  onChange={(e) => setTaxInfo({ ...taxInfo, fiscalName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold block mb-1.5 ml-1 text-[10px] tracking-wider">NIF / CIF</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm p-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                  placeholder="Ej: 12345678X"
+                  value={taxInfo.taxId}
+                  onChange={(e) => setTaxInfo({ ...taxInfo, taxId: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold block mb-1.5 ml-1 text-[10px] tracking-wider">Dirección (Calle y Número)</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm p-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                  placeholder="Ej: Calle Mayor 1, 2B"
+                  value={taxInfo.line1}
+                  onChange={(e) => setTaxInfo({ ...taxInfo, line1: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs text-slate-500 uppercase font-bold block mb-1.5 ml-1 text-[10px] tracking-wider">Ciudad</label>
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm p-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                    placeholder="Ej: Madrid"
+                    value={taxInfo.city}
+                    onChange={(e) => setTaxInfo({ ...taxInfo, city: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 uppercase font-bold block mb-1.5 ml-1 text-[10px] tracking-wider">Provincia</label>
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm p-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                    placeholder="Ej: Málaga"
+                    value={taxInfo.state}
+                    onChange={(e) => setTaxInfo({ ...taxInfo, state: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 uppercase font-bold block mb-1.5 ml-1 text-[10px] tracking-wider">Cód. Postal</label>
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm p-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                    placeholder="Ej: 28001"
+                    value={taxInfo.postalCode}
+                    onChange={(e) => setTaxInfo({ ...taxInfo, postalCode: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
