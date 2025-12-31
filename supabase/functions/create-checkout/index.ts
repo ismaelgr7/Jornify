@@ -26,6 +26,10 @@ serve(async (req) => {
 
         const origin = returnUrl || req.headers.get('origin');
 
+        const successUrl = `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl = `${origin}/dashboard`;
+        console.log('REDIRECTION URLS:', { successUrl, cancelUrl });
+
         const sessionOptions: any = {
             mode: 'subscription',
             payment_method_types: ['card'],
@@ -48,8 +52,8 @@ serve(async (req) => {
             automatic_tax: {
                 enabled: true,
             },
-            success_url: `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${origin}/dashboard`,
+            success_url: successUrl,
+            cancel_url: cancelUrl,
             metadata: {
                 company_id: companyId,
             },

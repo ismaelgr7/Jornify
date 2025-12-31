@@ -11,6 +11,11 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 serve(async (req) => {
     const signature = req.headers.get('stripe-signature')
     const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
@@ -23,8 +28,7 @@ serve(async (req) => {
         const body = await req.text()
         const event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret)
 
-        console.log(`Webhook event type: ${event.type}`);
-        console.log('Event data object:', JSON.stringify(event.data.object, null, 2));
+        console.log(`WEBHOOK EVENT RECEIVED: ${event.type}`);
 
         switch (event.type) {
             case 'checkout.session.completed': {
@@ -32,12 +36,15 @@ serve(async (req) => {
                 const companyId = session.metadata?.company_id
 
                 if (companyId && session.customer && session.subscription) {
+                    const status = session.payment_status === 'paid' ? 'active' : 'trialing';
+                    console.log(`CHECKOUT COMPLETED: Setting company ${companyId} status to ${status}`);
+
                     await supabase
                         .from('companies')
                         .update({
                             stripe_customer_id: session.customer as string,
                             subscription_id: session.subscription as string,
-                            subscription_status: 'trialing',
+                            subscription_status: status,
                         })
                         .eq('id', companyId)
                 }
@@ -48,6 +55,8 @@ serve(async (req) => {
             case 'customer.subscription.updated': {
                 const subscription = event.data.object as Stripe.Subscription
                 const customerId = subscription.customer as string
+
+                console.log(`SUBSCRIPTION ${event.type}: Customer ${customerId}, Status ${subscription.status}`);
 
                 // Find company by customer ID
                 const { data: company } = await supabase
@@ -94,14 +103,15 @@ serve(async (req) => {
 
             case 'invoice.payment_succeeded': {
                 const invoice = event.data.object as Stripe.Invoice
-                console.log('Payment succeeded for invoice:', invoice.id)
-                // Aquí podrías enviar un email de confirmación al cliente
+                console.log('PAYMENT SUCCEEDED: Invoice', invoice.id)
                 break
             }
 
             case 'invoice.payment_failed': {
                 const invoice = event.data.object as Stripe.Invoice
                 const customerId = invoice.customer as string
+
+                console.log('PAYMENT FAILED: Customer', customerId);
 
                 const { data: company } = await supabase
                     .from('companies')
@@ -129,11 +139,11 @@ serve(async (req) => {
             status: 200,
         })
     } catch (error) {
-        console.error('Webhook error:', error.message)
+        console.error('WEBHOOK ERROR:', error.message)
         return new Response(
             JSON.stringify({ error: error.message }),
             {
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 400,
             }
         )
