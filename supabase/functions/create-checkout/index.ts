@@ -2,7 +2,6 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
-    // Force new deploy
     apiVersion: '2023-10-16',
     httpClient: Stripe.createFetchHttpClient(),
 })
@@ -13,80 +12,38 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-    // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
     try {
         const { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId } = await req.json()
+        console.log('REQUEST:', { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId })
 
-        console.log('REQUEST RECEIVED:', { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId })
+        if (!companyId || !companyEmail || !employeeCount) throw new Error('Missing fields')
 
-        if (!companyId || !companyEmail || !employeeCount) {
-            throw new Error('Missing required fields')
-        }
-
-        const origin = returnUrl || req.headers.get('origin');
-
-        // Base Session Options
+        const origin = returnUrl || req.headers.get('origin'); 
         const sessionOptions: any = {
             mode: 'subscription',
             payment_method_types: ['card'],
-            line_items: [
-                {
-                    price: Deno.env.get('STRIPE_PRICE_ID'),
-                    quantity: employeeCount,
-                },
-            ],
-            subscription_data: {
-                trial_period_days: 14,
-                metadata: {
-                    company_id: companyId,
-                },
-            },
-            allow_promotion_codes: true, // Enable discount codes field
-            tax_id_collection: {
-                enabled: true,
-            },
-            automatic_tax: {
-                enabled: true,
-            },
+            line_items: [{ price: Deno.env.get('STRIPE_PRICE_ID'), quantity: employeeCount }],
+            subscription_data: { trial_period_days: 14, metadata: { company_id: companyId } },
+            allow_promotion_codes: true,
             success_url: `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/dashboard`,
-            metadata: {
-                company_id: companyId,
-            },
+            metadata: { company_id: companyId },
         }
 
-        // Add customer or email
-        if (stripeCustomerId) {
-            sessionOptions.customer = stripeCustomerId;
-        } else {
-            sessionOptions.customer_email = companyEmail;
-        }
+        if (stripeCustomerId) sessionOptions.customer = stripeCustomerId;
+        else sessionOptions.customer_email = companyEmail;
 
-        console.log('CREATING SESSION WITH OPTIONS:', JSON.stringify(sessionOptions))
-
+        console.log('OPTIONS:', JSON.stringify(sessionOptions))
         const session = await stripe.checkout.sessions.create(sessionOptions)
+        console.log('CREATED:', session.id, session.url)
 
-        console.log('SESSION CREATED:', session.id, session.url)
-
-        return new Response(
-            JSON.stringify({ url: session.url }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-            }
-        )
+        return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     } catch (error) {
-        console.error('ERROR CREATING SESSION:', error.message)
-        return new Response(
-            JSON.stringify({ error: error.message }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            }
-        )
+        console.error('ERROR:', error.message)
+        return new Response(JSON.stringify({ error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 })
     }
 })
