@@ -74,6 +74,9 @@ serve(async (req) => {
                     quantity: quantity,
                 }],
                 proration_behavior: 'always_invoice',
+                automatic_tax: {
+                    enabled: true,
+                },
             })
         }
 

@@ -269,15 +269,22 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
   const isBlocked = !isWithinInitialTrial && !hasActiveSubscription;
 
   if (isBlocked) {
+    const isCanceled = company.subscription_status === 'canceled';
+
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl shadow-blue-100 border border-blue-50 p-8 text-center animate-in fade-in zoom-in duration-500">
           <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-blue-200 rotate-3">
             <Lock size={40} className="text-white" />
           </div>
-          <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Tu periodo de prueba ha finalizado</h2>
+          <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">
+            {isCanceled ? 'Tu suscripción ha sido cancelada' : 'Tu periodo de prueba ha finalizado'}
+          </h2>
           <p className="text-slate-500 mb-8 font-medium leading-relaxed">
-            Esperamos que estos 14 días te hayan ayudado a ver lo fácil que es gestionar tu equipo con Jornify. Para seguir cumpliendo con la ley de registro horario, activa tu suscripción.
+            {isCanceled
+              ? 'Esperamos verte de vuelta pronto. Reactiva tu suscripción para seguir gestionando tu equipo y cumpliendo con la ley de registro horario.'
+              : 'Esperamos que estos 14 días te hayan ayudado a ver lo fácil que es gestionar tu equipo con Jornify. Para seguir cumpliendo con la ley de registro horario, activa tu suscripción.'
+            }
           </p>
 
           <div className="space-y-4 mb-8 text-left">
@@ -298,10 +305,10 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
           <button
             onClick={handleSubscription}
             disabled={isLoadingStripe}
-            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3"
+            className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-200 transition-all flex items-center justify-center gap-2 group"
           >
-            {isLoadingStripe ? <Clock size={20} className="animate-spin" /> : <CreditCard size={20} />}
-            {isLoadingStripe ? 'Conectando...' : 'Activar Suscripción'}
+            {isLoadingStripe ? 'Cargando...' : (isCanceled ? 'Reactivar Suscripción' : 'Activar Suscripción Premium')}
+            <CreditCard size={20} className="group-hover:translate-x-1 transition-transform" />
           </button>
 
           <p className="mt-6 text-[10px] text-slate-400 font-bold uppercase tracking-widest">

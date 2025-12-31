@@ -41,6 +41,7 @@ serve(async (req) => {
                     company_id: companyId,
                 },
             },
+            allow_promotion_codes: true, // Enable discount codes field
             tax_id_collection: {
                 enabled: true,
             },

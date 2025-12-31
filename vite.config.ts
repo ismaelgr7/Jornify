@@ -14,7 +14,11 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.ts',
         registerType: 'autoUpdate',
+        injectRegister: 'auto',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         manifest: {
           name: 'Jornify - Control de Horario',
@@ -44,6 +48,10 @@ export default defineConfig(({ mode }) => {
               purpose: 'maskable'
             }
           ]
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module'
         }
       })
     ],
