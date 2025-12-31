@@ -26,9 +26,12 @@ serve(async (req) => {
         const sessionOptions: any = {
             mode: 'subscription',
             payment_method_types: ['card'],
+            billing_address_collection: 'required', // <--- OBLIGATORIO PARA FACTURA
             line_items: [{ price: Deno.env.get('STRIPE_PRICE_ID'), quantity: employeeCount }],
-            // HE QUITADO LOS 14 DIAS AQUI ABAJO:
-            subscription_data: { metadata: { company_id: companyId } },
+            subscription_data: { 
+                trial_period_days: 14, // <--- RESTAURADOS LOS 14 DÍAS GRATIS
+                metadata: { company_id: companyId } 
+            },
             allow_promotion_codes: true,
             tax_id_collection: {
                 enabled: true,
