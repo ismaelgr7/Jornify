@@ -25,5 +25,21 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src",
+    "views",
+    "components",
+    "App.tsx",
+    "index.tsx",
+    "stripeUtils.ts",
+    "supabase.ts",
+    "types.ts",
+    "utils.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "supabase",
+    "dist"
+  ]
 }

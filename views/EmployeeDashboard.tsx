@@ -3,7 +3,7 @@ import { Employee, Company, TimeRecord } from '../types';
 import { formatDate, formatTime, calculateDurationMinutes, formatDuration, getWeekRange, generatePDF } from '../utils';
 import { Clock, Play, Square, Calendar, Building, AlertCircle, History, PenTool, Download, BellRing, ShieldCheck } from 'lucide-react';
 import { supabase } from '../supabase';
-import { subscribeUserToPush } from '../utils/pushNotifications';
+import { subscribeUserToPush } from '../src/utils/pushNotifications';
 import SignatureModal from '../components/SignatureModal';
 
 interface EmployeeDashboardProps {
@@ -205,6 +205,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
     }
     try {
       console.log("Requesting permission...");
+      const permission = await Notification.requestPermission();
       console.log("Permission result:", permission);
       setNotifPermission(permission);
 

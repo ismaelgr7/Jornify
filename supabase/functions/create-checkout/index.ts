@@ -18,19 +18,28 @@ serve(async (req) => {
 
     try {
         const { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId } = await req.json()
-        console.log('REQUEST:', { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId })
+        console.log('REQUEST RECEIVED:', { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId })
 
-        if (!companyId || !companyEmail || !employeeCount) throw new Error('Missing fields')
+        if (!companyId || !companyEmail || !employeeCount) {
+            throw new Error('Missing required fields')
+        }
 
-        const origin = returnUrl || req.headers.get('origin'); 
+        const origin = returnUrl || req.headers.get('origin');
+
         const sessionOptions: any = {
             mode: 'subscription',
             payment_method_types: ['card'],
-            billing_address_collection: 'required', // <--- OBLIGATORIO PARA FACTURA
-            line_items: [{ price: Deno.env.get('STRIPE_PRICE_ID'), quantity: employeeCount }],
-            subscription_data: { 
-                trial_period_days: 14, // <--- RESTAURADOS LOS 14 DÍAS GRATIS
-                metadata: { company_id: companyId } 
+            billing_address_collection: 'required',
+            line_items: [
+                {
+                    price: Deno.env.get('STRIPE_PRICE_ID'),
+                    quantity: employeeCount,
+                },
+            ],
+            subscription_data: {
+                metadata: {
+                    company_id: companyId,
+                },
             },
             allow_promotion_codes: true,
             tax_id_collection: {
@@ -41,19 +50,36 @@ serve(async (req) => {
             },
             success_url: `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/dashboard`,
-            metadata: { company_id: companyId },
+            metadata: {
+                company_id: companyId,
+            },
         }
 
-        if (stripeCustomerId) sessionOptions.customer = stripeCustomerId;
-        else sessionOptions.customer_email = companyEmail;
+        if (stripeCustomerId) {
+            sessionOptions.customer = stripeCustomerId;
+        } else {
+            sessionOptions.customer_email = companyEmail;
+        }
 
-        console.log('OPTIONS:', JSON.stringify(sessionOptions))
+        console.log('CREATING SESSION WITH OPTIONS:', JSON.stringify(sessionOptions))
         const session = await stripe.checkout.sessions.create(sessionOptions)
-        console.log('CREATED:', session.id, session.url)
+        console.log('SESSION CREATED:', session.id, session.url)
 
-        return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
+        return new Response(
+            JSON.stringify({ url: session.url }),
+            {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            }
+        )
     } catch (error) {
-        console.error('ERROR:', error.message)
-        return new Response(JSON.stringify({ error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 })
+        console.error('ERROR CREATING SESSION:', error.message)
+        return new Response(
+            JSON.stringify({ error: error.message }),
+            {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
+            }
+        )
     }
 })

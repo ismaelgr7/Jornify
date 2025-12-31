@@ -261,7 +261,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
 
   // Calculate trial status based on creation date
   const creationDate = company.created_at ? new Date(company.created_at) : new Date();
-  const trialEndDate = new Date(creationDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const trialEndDate = new Date(creationDate.getTime() + 0 * 24 * 60 * 60 * 1000);
   const now = new Date();
 
   const isWithinInitialTrial = now <= trialEndDate;
