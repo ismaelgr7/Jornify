@@ -21,23 +21,26 @@ serve(async (req) => {
     try {
         const { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId } = await req.json()
 
+        console.log('REQUEST RECEIVED:', { companyId, companyEmail, employeeCount, returnUrl, stripeCustomerId })
+
         if (!companyId || !companyEmail || !employeeCount) {
             throw new Error('Missing required fields')
         }
 
-        const origin = returnUrl || req.headers.get('origin'); // Fallback
+        const origin = returnUrl || req.headers.get('origin');
 
-        // Create Stripe Checkout Session
+        // Base Session Options
         const sessionOptions: any = {
             mode: 'subscription',
             payment_method_types: ['card'],
             line_items: [
                 {
                     price: Deno.env.get('STRIPE_PRICE_ID'),
-                    quantity: employeeCount, // Número de empleados
+                    quantity: employeeCount,
                 },
             ],
             subscription_data: {
+                trial_period_days: 14,
                 metadata: {
                     company_id: companyId,
                 },
@@ -56,14 +59,18 @@ serve(async (req) => {
             },
         }
 
-        // Use existing customer if provided, otherwise use email to let Stripe find/create
+        // Add customer or email
         if (stripeCustomerId) {
             sessionOptions.customer = stripeCustomerId;
         } else {
             sessionOptions.customer_email = companyEmail;
         }
 
+        console.log('CREATING SESSION WITH OPTIONS:', JSON.stringify(sessionOptions))
+
         const session = await stripe.checkout.sessions.create(sessionOptions)
+
+        console.log('SESSION CREATED:', session.id, session.url)
 
         return new Response(
             JSON.stringify({ url: session.url }),
@@ -73,6 +80,7 @@ serve(async (req) => {
             }
         )
     } catch (error) {
+        console.error('ERROR CREATING SESSION:', error.message)
         return new Response(
             JSON.stringify({ error: error.message }),
             {
