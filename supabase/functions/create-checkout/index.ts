@@ -27,8 +27,15 @@ serve(async (req) => {
             mode: 'subscription',
             payment_method_types: ['card'],
             line_items: [{ price: Deno.env.get('STRIPE_PRICE_ID'), quantity: employeeCount }],
-            subscription_data: { trial_period_days: 14, metadata: { company_id: companyId } },
+            // HE QUITADO LOS 14 DIAS AQUI ABAJO:
+            subscription_data: { metadata: { company_id: companyId } },
             allow_promotion_codes: true,
+            tax_id_collection: {
+                enabled: true,
+            },
+            automatic_tax: {
+                enabled: true,
+            },
             success_url: `${origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/dashboard`,
             metadata: { company_id: companyId },
