@@ -23,3 +23,5 @@ jobs:
           version: latest
 
       - run: supabase functions deploy create-checkout --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt
+      - run: supabase functions deploy send-push-nudge --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt
+      - run: supabase functions deploy stripe-webhook --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt

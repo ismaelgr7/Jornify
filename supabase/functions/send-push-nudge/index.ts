@@ -17,13 +17,20 @@ serve(async (req) => {
     try {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-        // 1. Obtener la hora actual en formato HH:MM
+        // 1. Obtener la hora actual en formato HH:MM (Madrid)
         const now = new Date();
-        // Ajustar a hora de España (Europe/Madrid) si es necesario, o usar UTC si el usuario lo prefiere.
-        // Para simplificar, asumiremos que nudge_time se guarda en UTC o que el servidor coincide.
-        const currentTime = now.toISOString().substring(11, 16);
+        const formatter = new Intl.DateTimeFormat('es-ES', {
+            timeZone: 'Europe/Madrid',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        const parts = formatter.formatToParts(now);
+        const hour = parts.find(p => p.type === 'hour')?.value;
+        const minute = parts.find(p => p.type === 'minute')?.value;
+        const currentTime = `${hour}:${minute}`;
 
-        console.log(`Checking nudges for time: ${currentTime}`);
+        console.log(`Checking nudges for Madrid time: ${currentTime}`);
 
         // 2. Buscar empleados que tengan nudge_time == currentTime
         const { data: employees, error: empError } = await supabase
