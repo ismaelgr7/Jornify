@@ -44,7 +44,7 @@ serve(async (req) => {
         console.log(`Checking nudges for Madrid. Window: [${validTimeStrings.join(', ')}]${employeeId ? ` (Manual for ${employeeId})` : ''}`);
 
         // 2. Buscar empleados
-        let query = supabase.from('employees').select('id, name, nudge_time');
+        let query = supabase.from('employees').select('id, name, nudge_time, last_nudge_at');
 
         if (employeeId) {
             query = query.eq('id', employeeId);
@@ -59,26 +59,37 @@ serve(async (req) => {
             return new Response(JSON.stringify({ message: "No nudges for this time" }), { status: 200 });
         }
 
-        const results = [];
-
         for (const employee of employees) {
-            // 3. Verificar si el empleado está fichado actualmente (activeRecord)
+            // 3. Evitar duplicados (solo para automático)
+            if (!employeeId) {
+                const today = new Date().toISOString().split('T')[0];
+                if (employee.last_nudge_at && employee.last_nudge_at.startsWith(today)) {
+                    console.log(`Bypass: ${employee.name} ya avisado hoy.`);
+                    continue;
+                }
+            }
+
+            // 4. Verificar si el empleado está fichado actualmente
             const { data: activeRecords, error: recordError } = await supabase
                 .from('time_records')
                 .select('id')
                 .eq('employee_id', employee.id)
                 .is('end_time', null);
 
-            if (recordError) continue;
-            if (!activeRecords || activeRecords.length === 0) continue;
+            if (recordError || !activeRecords || activeRecords.length === 0) continue;
 
-            // 4. Obtener suscripciones push
+            // 5. Obtener suscripciones push
             const { data: subs, error: subError } = await supabase
                 .from('push_subscriptions')
                 .select('subscription_json')
                 .eq('employee_id', employee.id);
 
-            if (subError || !subs) continue;
+            if (subError || !subs || subs.length === 0) continue;
+
+            // Antes de enviar, marcamos como enviado para evitar carreras
+            if (!employeeId) {
+                await supabase.from('employees').update({ last_nudge_at: new Date().toISOString() }).eq('id', employee.id);
+            }
 
             for (const sub of subs) {
                 try {
@@ -87,8 +98,12 @@ serve(async (req) => {
                         JSON.stringify({
                             title: 'Recordatorio de Jornify',
                             body: `Hola ${employee.name}, no olvides fichar tu salida.`,
-                            url: '/'
-                        })
+                            url: '/',
+                            // Tag único para que no se colapsen y suenen siempre
+                            tag: employeeId ? `manual-${Date.now()}` : `auto-${employee.id}`,
+                            timestamp: Date.now()
+                        }),
+                        { urgency: 'high' } // Prioridad alta para despertar móviles bloqueados
                     );
                     results.push({ employee: employee.name, status: 'sent' });
                 } catch (pushErr) {

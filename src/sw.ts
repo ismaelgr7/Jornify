@@ -29,6 +29,7 @@ self.addEventListener('push', (event) => {
         icon: '/pwa-192x192.png',
         badge: '/favicon.ico',
         vibrate: [200, 100, 200],
+        tag: data.tag, // Permite que notificaciones con distinto tag no se pisen
         data: {
             url: data.url || '/'
         }

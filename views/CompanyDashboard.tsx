@@ -75,11 +75,8 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
       if (pushError) {
         console.warn('Push notification error:', pushError);
       }
-
-      alert('Recordatorio enviado correctamente.');
     } catch (e) {
       console.error(e);
-      alert('Error al enviar el recordatorio.');
     }
   };
 
