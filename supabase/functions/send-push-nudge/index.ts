@@ -61,10 +61,12 @@ serve(async (req) => {
 
         for (const employee of employees) {
             // 3. Evitar duplicados (solo para automático)
-            if (!employeeId) {
-                const today = new Date().toISOString().split('T')[0];
-                if (employee.last_nudge_at && employee.last_nudge_at.startsWith(today)) {
-                    console.log(`Bypass: ${employee.name} ya avisado hoy.`);
+            // Permitimos re-enviar si han pasado más de 15 minutos (útil para testing)
+            if (!employeeId && employee.last_nudge_at) {
+                const lastNudge = new Date(employee.last_nudge_at).getTime();
+                const nowMs = new Date().getTime();
+                if (nowMs - lastNudge < 15 * 60 * 1000) { // Menos de 15 minutos
+                    console.log(`Bypass: ${employee.name} ya avisado hace poco.`);
                     continue;
                 }
             }
@@ -88,7 +90,11 @@ serve(async (req) => {
 
             // Antes de enviar, marcamos como enviado para evitar carreras
             if (!employeeId) {
-                await supabase.from('employees').update({ last_nudge_at: new Date().toISOString() }).eq('id', employee.id);
+                try {
+                    await supabase.from('employees').update({ last_nudge_at: new Date().toISOString() }).eq('id', employee.id);
+                } catch (e) {
+                    console.error("Error updating last_nudge_at:", e);
+                }
             }
 
             for (const sub of subs) {
