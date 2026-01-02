@@ -44,7 +44,7 @@ serve(async (req) => {
         console.log(`Checking nudges for Madrid. Window: [${validTimeStrings.join(', ')}]${employeeId ? ` (Manual for ${employeeId})` : ''}`);
 
         // 2. Buscar empleados
-        let query = supabase.from('employees').select('id, name, nudge_time, last_nudge_at');
+        let query = supabase.from('employees').select('*');
 
         if (employeeId) {
             query = query.eq('id', employeeId);
@@ -58,6 +58,8 @@ serve(async (req) => {
         if (!employees || employees.length === 0) {
             return new Response(JSON.stringify({ message: "No nudges for this time" }), { status: 200 });
         }
+
+        const results = [];
 
         for (const employee of employees) {
             // 3. Evitar duplicados (solo para automático)
@@ -90,10 +92,9 @@ serve(async (req) => {
 
             // Antes de enviar, marcamos como enviado para evitar carreras
             if (!employeeId) {
-                try {
-                    await supabase.from('employees').update({ last_nudge_at: new Date().toISOString() }).eq('id', employee.id);
-                } catch (e) {
-                    console.error("Error updating last_nudge_at:", e);
+                const { error: updateError } = await supabase.from('employees').update({ last_nudge_at: new Date().toISOString() }).eq('id', employee.id);
+                if (updateError) {
+                    console.warn("Note: last_nudge_at update skipped (likely missing column).");
                 }
             }
 
