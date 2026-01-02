@@ -63,10 +63,19 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
 
   const handleNudge = async (empId: string) => {
     try {
-      const { error } = await supabase.from('employees').update({ clock_out_nudge: true }).eq('id', empId);
-      if (error) throw error;
-      alert('Recordatorio enviado correctamente.');
-      if (error) throw error;
+      // 1. Local update for visual feedback
+      const { error: dbError } = await supabase.from('employees').update({ clock_out_nudge: true }).eq('id', empId);
+      if (dbError) throw dbError;
+
+      // 2. Trigger real mobile push notification via Edge Function
+      const { error: pushError } = await supabase.functions.invoke('send-push-nudge', {
+        body: { employeeId: empId }
+      });
+
+      if (pushError) {
+        console.warn('Push notification error:', pushError);
+      }
+
       alert('Recordatorio enviado correctamente.');
     } catch (e) {
       console.error(e);

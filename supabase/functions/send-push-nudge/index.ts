@@ -15,7 +15,8 @@ webpush.setVapidDetails(
 
 serve(async (req) => {
     try {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        // Read employeeId if provided for manual nudge
+        const { employeeId } = await req.json().catch(() => ({}));
 
         // 1. Obtener la hora actual en formato HH:MM (Madrid)
         const now = new Date();
@@ -30,13 +31,18 @@ serve(async (req) => {
         const minute = parts.find(p => p.type === 'minute')?.value;
         const currentTime = `${hour}:${minute}`;
 
-        console.log(`Checking nudges for Madrid time: ${currentTime}`);
+        console.log(`Checking nudges for Madrid time: ${currentTime}${employeeId ? ` (Manual for ${employeeId})` : ''}`);
 
-        // 2. Buscar empleados que tengan nudge_time == currentTime
-        const { data: employees, error: empError } = await supabase
-            .from('employees')
-            .select('id, full_name, nudge_time')
-            .eq('nudge_time', currentTime);
+        // 2. Buscar empleados
+        let query = supabase.from('employees').select('id, name, nudge_time');
+
+        if (employeeId) {
+            query = query.eq('id', employeeId);
+        } else {
+            query = query.eq('nudge_time', currentTime);
+        }
+
+        const { data: employees, error: empError } = await query;
 
         if (empError) throw empError;
         if (!employees || employees.length === 0) {
@@ -47,15 +53,14 @@ serve(async (req) => {
 
         for (const employee of employees) {
             // 3. Verificar si el empleado está fichado actualmente (activeRecord)
-            // Buscamos un registro en time_records que no tenga clock_out para hoy
             const { data: activeRecords, error: recordError } = await supabase
                 .from('time_records')
                 .select('id')
                 .eq('employee_id', employee.id)
-                .is('clock_out', null);
+                .is('end_time', null);
 
             if (recordError) continue;
-            if (!activeRecords || activeRecords.length === 0) continue; // No está fichado, no enviamos alerta
+            if (!activeRecords || activeRecords.length === 0) continue;
 
             // 4. Obtener suscripciones push
             const { data: subs, error: subError } = await supabase
@@ -70,15 +75,14 @@ serve(async (req) => {
                     await webpush.sendNotification(
                         sub.subscription_json,
                         JSON.stringify({
-                            title: 'Recordatorio de Salida',
-                            body: `Hola ${employee.full_name}, no olvides fichar tu salida.`,
+                            title: 'Recordatorio de Jornify',
+                            body: `Hola ${employee.name}, no olvides fichar tu salida.`,
                             url: '/'
                         })
                     );
-                    results.push({ employee: employee.full_name, status: 'sent' });
+                    results.push({ employee: employee.name, status: 'sent' });
                 } catch (pushErr) {
-                    console.error(`Error sending push to ${employee.full_name}:`, pushErr);
-                    // Si la suscripción ya no es válida, podríamos eliminarla
+                    console.error(`Error sending push to ${employee.name}:`, pushErr);
                     if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
                         await supabase.from('push_subscriptions').delete().eq('subscription_json', sub.subscription_json);
                     }
