@@ -52,7 +52,7 @@ export async function subscribeUserToPush(employeeId: string) {
             });
 
         if (error) throw error;
-        console.log('Push subscription saved successfully');
+        console.log('Push subscription saved successfully to Supabase for employee:', employeeId);
 
     } catch (error) {
         console.error('Error subscribing to push:', error);

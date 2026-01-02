@@ -6,12 +6,21 @@ declare let self: ServiceWorkerGlobalScope;
 precacheAndRoute(self.__WB_MANIFEST);
 
 self.addEventListener('push', (event) => {
-    const data = event.data ? event.data.json() : {};
+    console.log('Push event received', event);
+    let data = {};
+    try {
+        data = event.data ? event.data.json() : {};
+    } catch (e) {
+        console.warn('Push event contain non-JSON data', event.data?.text());
+        data = { title: 'Jornify', body: event.data?.text() || '¡Es hora de fichar!' };
+    }
+
     const title = data.title || 'Jornify';
     const options = {
         body: data.body || '¡Es hora de fichar!',
         icon: '/pwa-192x192.png',
         badge: '/favicon.ico',
+        vibrate: [200, 100, 200],
         data: {
             url: data.url || '/'
         }
