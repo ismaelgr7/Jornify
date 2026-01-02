@@ -17,21 +17,31 @@ serve(async (req) => {
     try {
         // Read employeeId if provided for manual nudge
         const { employeeId } = await req.json().catch(() => ({}));
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-        // 1. Obtener la hora actual en formato HH:MM (Madrid)
+        // 1. Obtener la hora actual y la de hace 1 minuto para dar margen (Madrid)
         const now = new Date();
-        const formatter = new Intl.DateTimeFormat('es-ES', {
-            timeZone: 'Europe/Madrid',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
-        const parts = formatter.formatToParts(now);
-        const hour = parts.find(p => p.type === 'hour')?.value;
-        const minute = parts.find(p => p.type === 'minute')?.value;
-        const currentTime = `${hour}:${minute}`;
+        const oneMinAgo = new Date(now.getTime() - 60000);
 
-        console.log(`Checking nudges for Madrid time: ${currentTime}${employeeId ? ` (Manual for ${employeeId})` : ''}`);
+        const getTimeString = (d: Date) => {
+            const f = new Intl.DateTimeFormat('es-ES', {
+                timeZone: 'Europe/Madrid',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            const p = f.formatToParts(d);
+            const h = p.find(x => x.type === 'hour')?.value || '00';
+            const m = p.find(x => x.type === 'minute')?.value || '00';
+            return [
+                `${h}:${m}`,
+                `${parseInt(h)}:${m}` // Para casos como "9:05"
+            ];
+        };
+
+        const validTimeStrings = [...getTimeString(now), ...getTimeString(oneMinAgo)];
+
+        console.log(`Checking nudges for Madrid. Window: [${validTimeStrings.join(', ')}]${employeeId ? ` (Manual for ${employeeId})` : ''}`);
 
         // 2. Buscar empleados
         let query = supabase.from('employees').select('id, name, nudge_time');
@@ -39,7 +49,7 @@ serve(async (req) => {
         if (employeeId) {
             query = query.eq('id', employeeId);
         } else {
-            query = query.eq('nudge_time', currentTime);
+            query = query.in('nudge_time', validTimeStrings);
         }
 
         const { data: employees, error: empError } = await query;
