@@ -286,6 +286,14 @@ const App: React.FC = () => {
   };
 
   const handleNewRecord = async (r: TimeRecord) => {
+    // Optimistic Update: Immediately add to local state
+    const recordWithHash = {
+      ...r,
+      parent_hash: '', // Temp
+      row_hash: '' // Temp
+    };
+    setRecords(prev => [...prev, recordWithHash]);
+
     // Get the latest record for this employee to link the hash chain
     const employeeRecords = records
       .filter(rec => rec.employee_id === r.employee_id)
@@ -297,17 +305,32 @@ const App: React.FC = () => {
     // Calculate initial hash (may be updated later when record is closed)
     const rowHash = await calculateRecordHash(r, parentHash);
 
-    const recordWithHash = {
+    const finalRecord = {
       ...r,
       parent_hash: parentHash,
       row_hash: rowHash
     };
 
-    const { error } = await supabase.from('time_records').insert([recordWithHash]);
-    if (error) console.error('Error creating record:', error);
+    // Replace the optimistic record with the real one (though for UI they look the same)
+    // We do this silently by updating the DB. The Realtime subscription will confirm it later.
+    // Ideally we update the local state with the hash too, but for UI responsiveness it doesn't matter much.
+    // Let's rely on the DB insert to eventually trigger a consistency update if we were strict.
+    // But to be safe, let's update local state with the Final Record including hashes.
+    setRecords(prev => prev.map(rec => rec.id === r.id ? finalRecord : rec));
+
+    const { error } = await supabase.from('time_records').insert([finalRecord]);
+    if (error) {
+      console.error('Error creating record:', error);
+      // Rollback on error
+      setRecords(prev => prev.filter(rec => rec.id !== r.id));
+      alert('Error de conexión. No se pudo guardar el fichaje.');
+    }
   };
 
   const handleUpdateRecord = async (r: TimeRecord) => {
+    // Optimistic Update
+    setRecords(prev => prev.map(rec => rec.id === r.id ? r : rec));
+
     // Recalculate hash because content (end_time, duration) changed
     const rowHash = await calculateRecordHash(r, r.parent_hash || '');
     const recordWithUpdatedHash = { ...r, row_hash: rowHash };
@@ -316,7 +339,13 @@ const App: React.FC = () => {
       .from('time_records')
       .update(recordWithUpdatedHash)
       .eq('id', r.id);
-    if (error) console.error('Error updating record:', error);
+
+    if (error) {
+      console.error('Error updating record:', error);
+      // We can't easily rollback an update without knowing previous state, 
+      // but typically we'd reload data or alert the user.
+      alert('Error al actualizar el registro. Por favor recarga la página.');
+    }
   };
 
   if (loading) return null;
