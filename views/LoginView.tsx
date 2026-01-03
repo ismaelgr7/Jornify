@@ -15,7 +15,7 @@ interface LoginViewProps {
   onUpdateEmployee?: (e: Employee) => void;
 }
 
-import { supabase } from '../supabase';
+import { supabase } from '../supabase.ts';
 
 // Helper to find user by email
 const findUserByEmail = async (email: string, role: string) => {
@@ -42,10 +42,39 @@ const LoginView: React.FC<LoginViewProps> = ({
   onUpdateCompany,
   onUpdateEmployee
 }) => {
-  // ... (hooks)
-  const [loading, setLoading] = useState(false); // Add loading state
+  const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<'login' | 'register' | 'recovery' | 'reset'>('login');
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    companyPin: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [targetUser, setTargetUser] = useState<Company | Employee | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [successPin, setSuccessPin] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // ... (useEffect)
+  useEffect(() => {
+    const key = `remembered_${role}`;
+    const saved = localStorage.getItem(key);
+    if (saved && viewMode === 'login') {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email && parsed.password) {
+          setFormData(prev => ({ ...prev, email: parsed.email, password: parsed.password }));
+          setRememberMe(true);
+        }
+      } catch (e) {
+        console.error('Error loading saved credentials', e);
+        localStorage.removeItem(key);
+      }
+    }
+  }, [role, viewMode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
