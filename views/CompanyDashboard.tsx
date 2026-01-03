@@ -89,11 +89,20 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
     if (!isNaN(num) && num > 0 && num <= 24) {
       try {
         const { error } = await supabase.from('employees').update({ typical_shift_hours: num }).eq('id', empId);
-        if (error) throw error;
-      } catch (e) {
-        console.error(e);
-        alert('Error al actualizar las horas de jornada.');
+        if (error) {
+          console.error('Supabase error:', error);
+          alert(`Error al actualizar: ${error.message}`);
+          throw error;
+        }
+        console.log(`Horas actualizadas a ${num}h para empleado ${empId}`);
+      } catch (e: any) {
+        console.error('Full error:', e);
+        if (!e.message) {
+          alert('Error al actualizar las horas de jornada.');
+        }
       }
+    } else {
+      alert('Por favor, introduce un número entre 1 y 24');
     }
     setEditingShiftHours(null);
   };
