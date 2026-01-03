@@ -15,9 +15,26 @@ interface LoginViewProps {
   onUpdateEmployee?: (e: Employee) => void;
 }
 
+import { supabase } from '../supabase';
+
+// Helper to find user by email
+const findUserByEmail = async (email: string, role: string) => {
+  const table = role === 'company' ? 'companies' : 'employees';
+  const { data, error } = await supabase
+    .from(table)
+    .select('*')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+// ... (rest of imports)
+
 const LoginView: React.FC<LoginViewProps> = ({
   role,
-  companies,
+  companies, // Keeping props for compatibility but not using them for auth
   employees,
   onSuccess,
   onRegisterCompany,
@@ -25,115 +42,102 @@ const LoginView: React.FC<LoginViewProps> = ({
   onUpdateCompany,
   onUpdateEmployee
 }) => {
-  const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'login' | 'register' | 'recovery' | 'reset'>('login');
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    companyPin: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-  const [targetUser, setTargetUser] = useState<Company | Employee | null>(null);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const [successPin, setSuccessPin] = useState('');
+  // ... (hooks)
+  const [loading, setLoading] = useState(false); // Add loading state
 
-  useEffect(() => {
-    const key = `remembered_${role}`;
-    const saved = localStorage.getItem(key);
-    if (saved && viewMode === 'login') {
-      const parsed = JSON.parse(saved);
-      setFormData(prev => ({ ...prev, email: parsed.email, password: parsed.password }));
-      setRememberMe(true);
-    }
-  }, [role, viewMode]);
+  // ... (useEffect)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
+    setLoading(true);
 
-    if (viewMode === 'register') {
-      if (role === 'company') {
-        const newPin = Math.floor(100000 + Math.random() * 900000).toString();
-        const newCompany: any = {
-          id: crypto.randomUUID(),
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          pin: newPin,
-          owner_id: crypto.randomUUID()
-        };
-        onRegisterCompany?.(newCompany);
-        setSuccessPin(newPin);
-        setViewMode('login');
-      } else {
-        const company = companies.find(c => c.pin === formData.companyPin);
-        if (!company) {
-          setError('El PIN de la empresa no es válido.');
+    try {
+      if (viewMode === 'register') {
+        if (role === 'company') {
+          const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+          const newCompany: any = {
+            id: crypto.randomUUID(),
+            name: formData.name,
+            email: formData.email,
+            password: formData.password,
+            pin: newPin,
+            owner_id: crypto.randomUUID()
+          };
+          onRegisterCompany?.(newCompany);
+          setSuccessPin(newPin);
+          setViewMode('login');
+        } else {
+          // Verify PIN remotely
+          const { data: company, error } = await supabase
+            .from('companies')
+            .select('id')
+            .eq('pin', formData.companyPin)
+            .maybeSingle();
+
+          if (error || !company) {
+            setError('El PIN de la empresa no es válido.');
+            setLoading(false);
+            return;
+          }
+
+          const newEmployee: any = {
+            id: crypto.randomUUID(),
+            name: formData.name,
+            email: formData.email,
+            password: formData.password,
+            company_pin: formData.companyPin,
+            company_id: company.id,
+            contracted_hours_per_week: 40,
+            user_id: crypto.randomUUID()
+          };
+          onRegisterEmployee?.(newEmployee);
+          setViewMode('login');
+        }
+      } else if (viewMode === 'login') {
+        const user = await findUserByEmail(formData.email, role || 'employee'); // Safe fallback
+
+        if (user && (user.password === formData.password || !user.password)) {
+          handleSuccessLogin(user);
+        } else {
+          setError('Credenciales incorrectas.');
+        }
+      } else if (viewMode === 'recovery') {
+        const user = await findUserByEmail(formData.email, role || 'employee');
+
+        if (user) {
+          setTargetUser(user);
+          setViewMode('reset');
+        } else {
+          setError('No se ha encontrado ninguna cuenta con ese email.');
+        }
+      } else if (viewMode === 'reset') {
+        if (formData.newPassword !== formData.confirmPassword) {
+          setError('Las contraseñas no coinciden.');
+          setLoading(false);
           return;
         }
-        const newEmployee: any = {
-          id: crypto.randomUUID(),
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          company_pin: formData.companyPin,
-          company_id: company.id,
-          contracted_hours_per_week: 40,
-          user_id: crypto.randomUUID()
-        };
-        onRegisterEmployee?.(newEmployee);
-        setViewMode('login');
-      }
-    } else if (viewMode === 'login') {
-      if (role === 'company') {
-        const company: any = companies.find(c => c.email === formData.email);
-        if (company && (company.password === formData.password || !company.password)) {
-          handleSuccessLogin(company);
-        } else {
-          setError('Credenciales incorrectas.');
+        if (formData.newPassword.length < 4) {
+          setError('La contraseña debe tener al menos 4 caracteres.');
+          setLoading(false);
+          return;
         }
-      } else {
-        const employee: any = employees.find(e => e.email === formData.email);
-        if (employee && (employee.password === formData.password || !employee.password)) {
-          handleSuccessLogin(employee);
-        } else {
-          setError('Credenciales incorrectas.');
+
+        if (targetUser) {
+          const updatedUser = { ...targetUser, password: formData.newPassword } as any;
+          if (role === 'company') onUpdateCompany?.(updatedUser);
+          else onUpdateEmployee?.(updatedUser);
+
+          setSuccessMsg('Contraseña actualizada con éxito. Ya puedes iniciar sesión.');
+          setViewMode('login');
         }
       }
-    } else if (viewMode === 'recovery') {
-      const user: any = role === 'company'
-        ? companies.find(c => c.email === formData.email)
-        : employees.find(e => e.email === formData.email);
-
-      if (user) {
-        setTargetUser(user);
-        setViewMode('reset');
-      } else {
-        setError('No se ha encontrado ninguna cuenta con ese email.');
-      }
-    } else if (viewMode === 'reset') {
-      if (formData.newPassword !== formData.confirmPassword) {
-        setError('Las contraseñas no coinciden.');
-        return;
-      }
-      if (formData.newPassword.length < 4) {
-        setError('La contraseña debe tener al menos 4 caracteres.');
-        return;
-      }
-
-      if (targetUser) {
-        const updatedUser = { ...targetUser, password: formData.newPassword } as any;
-        if (role === 'company') onUpdateCompany?.(updatedUser);
-        else onUpdateEmployee?.(updatedUser);
-
-        setSuccessMsg('Contraseña actualizada con éxito. Ya puedes iniciar sesión.');
-        setViewMode('login');
-      }
+    } catch (err: any) {
+      console.error(err);
+      setError('Error de conexión: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 

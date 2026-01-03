@@ -67,88 +67,173 @@ const App: React.FC = () => {
   const [signatures, setSignatures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch initial data from Supabase
-  const fetchData = async () => {
-    try {
-      const { data: companiesData } = await supabase.from('companies').select('*');
-      const { data: employeesData } = await supabase.from('employees').select('*');
-      const { data: recordsData } = await supabase.from('time_records').select('*');
-      const { data: signaturesData } = await supabase.from('monthly_signatures').select('*');
+  // Fetch data scoped to the current user
+  const loadUserData = async () => {
+    if (!auth.user || !auth.role) return;
 
-      if (companiesData) setCompanies(companiesData);
-      if (employeesData) setEmployees(employeesData);
-      if (recordsData) setRecords(recordsData);
-      if (signaturesData) setSignatures(signaturesData);
+    try {
+      if (auth.role === 'company') {
+        const companyId = auth.user.id;
+
+        // 1. Load Company Details (Self)
+        // Already loaded via auth.user, but refreshing is good
+
+        // 2. Load Employees of this Company
+        const { data: myEmployees } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('company_id', companyId);
+
+        if (myEmployees) {
+          setEmployees(myEmployees);
+
+          // 3. Load Records for these employees (Optimize range if needed later)
+          const employeeIds = myEmployees.map(e => e.id);
+          if (employeeIds.length > 0) {
+            const { data: myRecords } = await supabase
+              .from('time_records')
+              .select('*')
+              .in('employee_id', employeeIds);
+
+            if (myRecords) setRecords(myRecords);
+
+            const { data: mySignatures } = await supabase
+              .from('monthly_signatures')
+              .select('*')
+              .in('employee_id', employeeIds);
+
+            if (mySignatures) setSignatures(mySignatures);
+          }
+        }
+      } else {
+        const employee = auth.user as Employee;
+
+        // 1. Load My Company
+        const { data: myCompany } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('pin', employee.company_pin)
+          .maybeSingle();
+
+        if (myCompany) setCompanies([myCompany]);
+
+        // 2. Load Me (Refresh)
+        const { data: me } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('id', employee.id)
+          .single();
+
+        if (me) setEmployees([me]);
+
+        // 3. Load My Records
+        const { data: myRecords } = await supabase
+          .from('time_records')
+          .select('*')
+          .eq('employee_id', employee.id);
+
+        if (myRecords) setRecords(myRecords);
+
+        const { data: mySignatures } = await supabase
+          .from('monthly_signatures')
+          .select('*')
+          .eq('employee_id', employee.id);
+
+        if (mySignatures) setSignatures(mySignatures);
+      }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error loading user data:', error);
     }
   };
 
   useEffect(() => {
     const init = async () => {
-      await fetchData();
       const savedAuth = localStorage.getItem(STORAGE_KEYS.AUTH);
       if (savedAuth) {
         const parsed = JSON.parse(savedAuth);
-        // Refresh the user data from the live data we just fetched
-        if (parsed.role === 'company') {
-          // This will be updated by the useEffect below too, but let's do it here for immediate effect
-          setAuth(parsed);
-        } else {
-          setAuth(parsed);
-        }
+        setAuth(parsed);
       }
       setLoading(false);
     };
     init();
-
-    // Subscribe to changes
-    const companiesSub = supabase.channel('companies_changes')
-      .on('postgres_changes' as any, { event: '*', table: 'companies' }, fetchData)
-      .subscribe();
-
-    const employeesSub = supabase.channel('employees_changes')
-      .on('postgres_changes' as any, { event: '*', table: 'employees' }, fetchData)
-      .subscribe();
-
-    const recordsSub = supabase.channel('records_changes')
-      .on('postgres_changes' as any, { event: '*', table: 'time_records' }, fetchData)
-      .subscribe();
-
-    const signaturesSub = supabase.channel('signatures_changes')
-      .on('postgres_changes' as any, { event: '*', table: 'monthly_signatures' }, fetchData)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(companiesSub);
-      supabase.removeChannel(employeesSub);
-      supabase.removeChannel(recordsSub);
-      supabase.removeChannel(signaturesSub);
-    };
   }, []);
 
-  // Synchronize auth.user with the live companies/employees data
+  // Load data when auth changes
   useEffect(() => {
-    if (auth.user && auth.role) {
-      if (auth.role === 'company') {
-        const liveComp = companies.find(c => c.id === auth.user?.id);
-        if (liveComp && (
-          liveComp.tax_id !== (auth.user as Company).tax_id ||
-          liveComp.subscription_status !== (auth.user as Company).subscription_status ||
-          liveComp.address_line1 !== (auth.user as Company).address_line1 ||
-          liveComp.address_state !== (auth.user as Company).address_state ||
-          liveComp.fiscal_name !== (auth.user as Company).fiscal_name
-        )) {
-          setAuth(prev => ({ ...prev, user: liveComp }));
-        }
-      } else {
-        const liveEmp = employees.find(e => e.id === auth.user?.id);
-        if (liveEmp && JSON.stringify(liveEmp) !== JSON.stringify(auth.user)) {
-          setAuth(prev => ({ ...prev, user: liveEmp }));
-        }
-      }
+    if (auth.user) {
+      loadUserData();
+    } else {
+      // Clear sensitive data on logout
+      setCompanies([]);
+      setEmployees([]);
+      setRecords([]);
+      setSignatures([]);
     }
-  }, [companies, employees, auth.role, auth.user?.id]);
+  }, [auth.user?.id, auth.role]);
+
+  // Subscribe to scoped changes
+  useEffect(() => {
+    if (!auth.user || !auth.role) return;
+
+    let subs: any[] = [];
+
+    const setupSubs = () => {
+      if (auth.role === 'company') {
+        const companyId = auth.user!.id;
+
+        // Company updates (Self)
+        subs.push(supabase.channel(`company:${companyId}`)
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'companies', filter: `id=eq.${companyId}` },
+            (payload) => setAuth(prev => ({ ...prev, user: payload.new as Company }))
+          ).subscribe());
+
+        // Employees updates (My Company)
+        subs.push(supabase.channel(`employees:${companyId}`)
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'employees', filter: `company_id=eq.${companyId}` },
+            loadUserData
+          ).subscribe());
+
+        // Records updates (My Employees) -- This might need RLS policies to work perfectly with filters if not using precise filters
+        // For scalability, we listen to all records but filter locally or re-fetch.
+        // Better: Listen to records where employee_id is in my list? Supabase realtime doesn't support 'in'.
+        // Compromise: Listen to all records and filter in callback? No, that's what we want to avoid.
+        // Solution: If RLS is enabled, we only receive our events. If not, we rely on the filter.
+        // Since we can't easily filter 'time_records' by 'company_id' (it's not on the table), 
+        // we'll rely on re-fetching logic triggered by UI actions for now, OR accept global events but only re-fetch if relevant.
+        // Actually, for now, let's just reload data on ANY record change. It's not ideal but better than full load.
+        // Refinement: meaningful scalability requires backend triggers or 'company_id' on time_records.
+        // For this refactor, let's keep it simple: Reload user data on record changes. RLS will protect the data stream later.
+        subs.push(supabase.channel('public:time_records')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'time_records' }, loadUserData)
+          .subscribe());
+
+      } else {
+        const employeeId = auth.user!.id;
+
+        // My Employee Profile updates
+        subs.push(supabase.channel(`employee:${employeeId}`)
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'employees', filter: `id=eq.${employeeId}` },
+            (payload) => setAuth(prev => ({ ...prev, user: payload.new as Employee }))
+          ).subscribe());
+
+        // My Records updates
+        subs.push(supabase.channel(`records:${employeeId}`)
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'time_records', filter: `employee_id=eq.${employeeId}` },
+            loadUserData
+          ).subscribe());
+      }
+    };
+
+    setupSubs();
+
+    return () => {
+      subs.forEach(sub => supabase.removeChannel(sub));
+    };
+  }, [auth.user?.id, auth.role]);
 
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEYS.AUTH);

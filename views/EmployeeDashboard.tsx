@@ -90,8 +90,12 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
   useEffect(() => {
     let interval: any;
     if (activeRecord) {
-      interval = setInterval(() => {
-        setTimer(t => t + 1);
+      // Function to calculate exact elapsed time
+      const updateTimer = () => {
+        const start = new Date(activeRecord.start_time).getTime();
+        const now = Date.now();
+        const diff = Math.max(0, Math.floor((now - start) / 1000));
+        setTimer(diff);
 
         // Check for scheduled nudge
         if (employee.nudge_time && !nudge && !nudgeRequestedRef.current) {
@@ -100,7 +104,13 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
             handleAutoNudge();
           }
         }
-      }, 1000);
+      };
+
+      // Initial call to set immediate state
+      updateTimer();
+
+      // Update every second (even if throttled, the math will correct itself on next tick)
+      interval = setInterval(updateTimer, 1000);
     }
     return () => clearInterval(interval);
   }, [activeRecord, employee.nudge_time, nudge]);
