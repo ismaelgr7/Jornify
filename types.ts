@@ -26,6 +26,7 @@ export interface Employee {
   company_pin: string;
   company_id: string;
   contracted_hours_per_week: number; // Configurado por la empresa
+  typical_shift_hours?: number; // Duración habitual de jornada en horas (para recordatorios)
   user_id: string;
   clock_out_nudge?: boolean;
   nudge_time?: string;

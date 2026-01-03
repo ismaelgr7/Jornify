@@ -16,6 +16,7 @@ interface CompanyDashboardProps {
 
 const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees, records, signatures, onUpdateEmployee }) => {
   const [editingHours, setEditingHours] = useState<string | null>(null);
+  const [editingShiftHours, setEditingShiftHours] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all');
@@ -30,6 +31,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
     fiscalName: company.fiscal_name || company.name || ''
   });
   const [isSavingTax, setIsSavingTax] = useState(false);
+  const [scheduledReminders, setScheduledReminders] = useState<Record<string, { id: string, scheduled_time: string, time_record_id: string }>>({});
 
   const getWeeklyHours = (employeeId: string) => {
     const { start, end } = getWeekRange();
@@ -43,12 +45,57 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
     return active ? 'Fichado' : 'Ausente';
   };
 
+  const fetchScheduledReminders = async () => {
+    try {
+      const activeRecordIds = records.filter(r => r.end_time === null).map(r => r.id);
+      if (activeRecordIds.length === 0) {
+        setScheduledReminders({});
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('scheduled_reminders')
+        .select('id, employee_id, time_record_id, scheduled_time')
+        .in('time_record_id', activeRecordIds)
+        .is('sent_at', null);
+
+      if (error) throw error;
+
+      const remindersMap: Record<string, any> = {};
+      data?.forEach(reminder => {
+        remindersMap[reminder.employee_id] = reminder;
+      });
+      setScheduledReminders(remindersMap);
+    } catch (e) {
+      console.error('Error fetching reminders:', e);
+    }
+  };
+
+  // Fetch reminders when records change
+  React.useEffect(() => {
+    fetchScheduledReminders();
+  }, [records]);
+
   const handleUpdateWeeklyHours = (emp: Employee, hours: string) => {
     const num = parseInt(hours);
     if (!isNaN(num)) {
       onUpdateEmployee({ ...emp, contracted_hours_per_week: num });
     }
     setEditingHours(null);
+  };
+
+  const handleUpdateShiftHours = async (empId: string, hours: string) => {
+    const num = parseInt(hours);
+    if (!isNaN(num) && num > 0 && num <= 24) {
+      try {
+        const { error } = await supabase.from('employees').update({ typical_shift_hours: num }).eq('id', empId);
+        if (error) throw error;
+      } catch (e) {
+        console.error(e);
+        alert('Error al actualizar las horas de jornada.');
+      }
+    }
+    setEditingShiftHours(null);
   };
 
   const handleUpdateNudgeTime = async (empId: string, time: string) => {
@@ -589,7 +636,8 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
                 <th className="px-8 py-4 font-bold">Empleado</th>
                 <th className="px-8 py-4 font-bold text-center">Estado</th>
                 <th className="px-8 py-4 font-bold text-center">Contrato</th>
-                <th className="px-8 py-4 font-bold text-center">Aviso Salida</th>
+                <th className="px-8 py-4 font-bold text-center">Jornada Habitual</th>
+                <th className="px-8 py-4 font-bold text-center">Recordatorio Auto</th>
                 <th className="px-8 py-4 font-bold text-right">Horas</th>
                 <th className="px-8 py-4 font-bold text-right">Extras</th>
               </tr>
@@ -600,6 +648,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
                 const contractedMins = (emp.contracted_hours_per_week || 40) * 60;
                 const status = getStatus(emp.id);
                 const isOvertime = weeklyMins > contractedMins;
+                const reminder = scheduledReminders[emp.id];
 
                 return (
                   <tr key={emp.id} className="hover:bg-slate-50 transition-colors group">
@@ -640,12 +689,36 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
                       )}
                     </td>
                     <td className="px-8 py-5 text-center">
-                      <input
-                        type="time"
-                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        defaultValue={emp.nudge_time || ''}
-                        onBlur={(e) => handleUpdateNudgeTime(emp.id, e.target.value)}
-                      />
+                      {editingShiftHours === emp.id ? (
+                        <input
+                          type="number"
+                          min="1"
+                          max="24"
+                          className="w-20 px-3 py-1.5 border-2 border-blue-500 rounded-lg text-center text-sm font-bold focus:outline-none"
+                          defaultValue={emp.typical_shift_hours || 8}
+                          onBlur={(e) => handleUpdateShiftHours(emp.id, e.target.value)}
+                          autoFocus
+                        />
+                      ) : (
+                        <div
+                          className="cursor-pointer hover:bg-blue-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-2 text-slate-600 transition-colors group/edit"
+                          onClick={() => setEditingShiftHours(emp.id)}
+                        >
+                          <span className="font-bold tracking-tight">{emp.typical_shift_hours || 8}h</span>
+                          <Edit2 size={12} className="opacity-0 group-hover/edit:opacity-100 transition-opacity text-blue-500" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-8 py-5 text-center">
+                      {status === 'Fichado' && reminder ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                            {new Date(reminder.scheduled_time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-300 font-bold">-</span>
+                      )}
                     </td>
                     <td className="px-8 py-5 text-right font-mono font-bold text-slate-700">
                       {formatDuration(weeklyMins)}

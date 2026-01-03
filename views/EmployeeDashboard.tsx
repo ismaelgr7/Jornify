@@ -33,10 +33,12 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
       if (notifPermission === 'granted') {
         new Notification("Jornify: Recordatorio", {
           body: "Parece que olvidaste cerrar tu jornada. ¡Ficha la salida ahora!",
-          icon: "/icon-192x192.png",
+          icon: "/pwa-192x192.png",
           vibrate: [200, 100, 200]
         } as any);
       }
+      // Reset so it can be triggered again
+      resetNudge();
     }
     setNudge(employee.clock_out_nudge || false);
     // Reset the ref if the prop becomes false (meaning it was handled/reset)
@@ -147,6 +149,16 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
         duration_minutes: calculateDurationMinutes(activeRecord.start_time, endTime)
       };
       onUpdateRecord(updatedRecord);
+
+      // Cancel any pending reminder for this work session
+      try {
+        await supabase.from('scheduled_reminders')
+          .update({ sent_at: new Date().toISOString() })
+          .eq('time_record_id', activeRecord.id)
+          .is('sent_at', null);
+      } catch (e) {
+        console.error('Error canceling reminder:', e);
+      }
     } else {
       const newRecord: TimeRecord = {
         id: crypto.randomUUID(),
@@ -158,6 +170,21 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
         type: 'work'
       };
       onNewRecord(newRecord);
+
+      // Schedule automatic reminder based on employee's typical shift duration
+      try {
+        const clockInTime = new Date();
+        const shiftHours = employee.typical_shift_hours || 8; // Default to 8h if not set
+        const reminderTime = new Date(clockInTime.getTime() + shiftHours * 60 * 60 * 1000);
+
+        await supabase.from('scheduled_reminders').insert({
+          employee_id: employee.id,
+          time_record_id: newRecord.id,
+          scheduled_time: reminderTime.toISOString()
+        });
+      } catch (e) {
+        console.error('Error scheduling reminder:', e);
+      }
     }
     if (nudge) resetNudge();
   };
