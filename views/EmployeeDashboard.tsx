@@ -126,7 +126,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
     }
   };
 
-  const handleToggleWork = () => {
+  const handleToggleWork = async () => {
     // Subscription / Trial enforcement
     const creationDate = company?.created_at ? new Date(company.created_at) : new Date();
     const trialEndDate = new Date(creationDate.getTime() + 14 * 24 * 60 * 60 * 1000);
