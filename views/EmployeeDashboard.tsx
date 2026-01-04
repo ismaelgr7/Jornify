@@ -36,8 +36,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
           vibrate: [200, 100, 200]
         } as any);
       }
-      // Reset so it can be triggered again
-      resetNudge();
     }
     setNudge(employee.clock_out_nudge || false);
     // Reset the ref if the prop becomes false (meaning it was handled/reset)
@@ -115,8 +113,11 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
 
     try {
       await supabase.from('employees').update({ clock_out_nudge: true }).eq('id', employee.id);
-      // We don't setNudge(true) here because the real-time sub in App.tsx 
-      // will update the employee prop, which triggers the nudge effect.
+
+      // Also trigger the real push notification for the lock screen
+      await supabase.functions.invoke('send-push-nudge', {
+        body: { employeeId: employee.id }
+      });
     } catch (e) {
       console.error('Error triggering auto nudge:', e);
       nudgeRequestedRef.current = false; // Reset on error so we can retry

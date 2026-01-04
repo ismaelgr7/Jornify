@@ -199,7 +199,7 @@ const App: React.FC = () => {
         subs.push(supabase.channel(`employee:${userId}`)
           .on('postgres_changes',
             { event: '*', schema: 'public', table: 'employees', filter: `id=eq.${userId}` },
-            (payload) => setAuth(prev => ({ ...prev, user: payload.new as Employee }))
+            () => loadUserData() // RELOAD all user data, not just auth.user, to sync the employees array
           ).subscribe());
 
         // My Records updates
