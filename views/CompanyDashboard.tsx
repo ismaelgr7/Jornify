@@ -71,9 +71,21 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ company, employees,
     }
   };
 
-  // Fetch reminders when records change
+  // Fetch reminders when records change OR via Realtime
   React.useEffect(() => {
     fetchScheduledReminders();
+
+    const sub = supabase
+      .channel('public:scheduled_reminders')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'scheduled_reminders' },
+        () => fetchScheduledReminders()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sub);
+    };
   }, [records]);
 
   const handleUpdateWeeklyHours = (emp: Employee, hours: string) => {
