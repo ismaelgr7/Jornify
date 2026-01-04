@@ -16,7 +16,6 @@ interface EmployeeDashboardProps {
 }
 
 const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company, records, signatures = [], onNewRecord, onUpdateRecord }) => {
-  const [activeRecord, setActiveRecord] = useState<TimeRecord | null>(null);
   const [timer, setTimer] = useState(0);
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [nudge, setNudge] = useState(employee.clock_out_nudge || false);
@@ -67,52 +66,40 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ employee, company
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   }), [records, currentMonth, currentYear]);
 
-  // Optimize Active Record detection
-  useEffect(() => {
-    const active = records.find(r => r.end_time === null);
-    if (active) {
-      // Only update if ID changes to avoid timer reset on trivial updates
-      setActiveRecord(prev => prev?.id === active.id ? active : active);
+  // Derive active record from records prop
+  const activeRecord = useMemo(() => records.find(r => r.end_time === null), [records]);
 
-      // Calculate timer only on mount or if active record ID changes
-      if (!activeRecord || activeRecord.id !== active.id) {
-        const start = new Date(active.start_time).getTime();
-        const now = new Date().getTime();
-        setTimer(Math.floor((now - start) / 1000));
-      }
-    } else {
-      setActiveRecord(null);
-      setTimer(0);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [records]);
-
+  // Handle timer and auto-nudge
   useEffect(() => {
     let interval: any;
-    if (activeRecord) {
-      // Function to calculate exact elapsed time
-      const updateTimer = () => {
+
+    const updateTimer = () => {
+      if (activeRecord) {
         const start = new Date(activeRecord.start_time).getTime();
         const now = Date.now();
         const diff = Math.max(0, Math.floor((now - start) / 1000));
         setTimer(diff);
 
-        // Check for scheduled nudge
         if (employee.nudge_time && !nudge && !nudgeRequestedRef.current) {
           const nowTime = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
           if (nowTime === employee.nudge_time) {
             handleAutoNudge();
           }
         }
-      };
+      } else {
+        setTimer(0);
+      }
+    };
 
-      // Initial call to set immediate state
-      updateTimer();
+    updateTimer();
 
-      // Update every second (even if throttled, the math will correct itself on next tick)
+    if (activeRecord) {
       interval = setInterval(updateTimer, 1000);
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [activeRecord, employee.nudge_time, nudge]);
 
   useEffect(() => {

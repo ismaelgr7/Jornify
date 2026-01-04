@@ -68,17 +68,13 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Fetch data scoped to the current user
-  const loadUserData = async () => {
+  const loadUserData = React.useCallback(async () => {
     if (!auth.user || !auth.role) return;
 
     try {
       if (auth.role === 'company') {
         const companyId = auth.user.id;
 
-        // 1. Load Company Details (Self)
-        // Already loaded via auth.user, but refreshing is good
-
-        // 2. Load Employees of this Company
         const { data: myEmployees } = await supabase
           .from('employees')
           .select('*')
@@ -87,7 +83,6 @@ const App: React.FC = () => {
         if (myEmployees) {
           setEmployees(myEmployees);
 
-          // 3. Load Records for these employees (Optimize range if needed later)
           const employeeIds = myEmployees.map(e => e.id);
           if (employeeIds.length > 0) {
             const { data: myRecords } = await supabase
@@ -108,7 +103,6 @@ const App: React.FC = () => {
       } else {
         const employee = auth.user as Employee;
 
-        // 1. Load My Company
         const { data: myCompany } = await supabase
           .from('companies')
           .select('*')
@@ -117,7 +111,6 @@ const App: React.FC = () => {
 
         if (myCompany) setCompanies([myCompany]);
 
-        // 2. Load Me (Refresh)
         const { data: me } = await supabase
           .from('employees')
           .select('*')
@@ -126,7 +119,6 @@ const App: React.FC = () => {
 
         if (me) setEmployees([me]);
 
-        // 3. Load My Records
         const { data: myRecords } = await supabase
           .from('time_records')
           .select('*')
@@ -144,7 +136,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Error loading user data:', error);
     }
-  };
+  }, [auth.user?.id, auth.role]); // Stable reference based on auth state
 
   useEffect(() => {
     const init = async () => {
@@ -178,52 +170,43 @@ const App: React.FC = () => {
     let subs: any[] = [];
 
     const setupSubs = () => {
-      if (auth.role === 'company') {
-        const companyId = auth.user!.id;
+      const userId = auth.user?.id;
+      const role = auth.role;
+      if (!userId || !role) return;
 
+      if (role === 'company') {
         // Company updates (Self)
-        subs.push(supabase.channel(`company:${companyId}`)
+        subs.push(supabase.channel(`company:${userId}`)
           .on('postgres_changes',
-            { event: '*', schema: 'public', table: 'companies', filter: `id=eq.${companyId}` },
+            { event: '*', schema: 'public', table: 'companies', filter: `id=eq.${userId}` },
             (payload) => setAuth(prev => ({ ...prev, user: payload.new as Company }))
           ).subscribe());
 
         // Employees updates (My Company)
-        subs.push(supabase.channel(`employees:${companyId}`)
+        subs.push(supabase.channel(`employees:${userId}`)
           .on('postgres_changes',
-            { event: '*', schema: 'public', table: 'employees', filter: `company_id=eq.${companyId}` },
-            loadUserData
+            { event: '*', schema: 'public', table: 'employees', filter: `company_id=eq.${userId}` },
+            () => loadUserData()
           ).subscribe());
 
-        // Records updates (My Employees) -- This might need RLS policies to work perfectly with filters if not using precise filters
-        // For scalability, we listen to all records but filter locally or re-fetch.
-        // Better: Listen to records where employee_id is in my list? Supabase realtime doesn't support 'in'.
-        // Compromise: Listen to all records and filter in callback? No, that's what we want to avoid.
-        // Solution: If RLS is enabled, we only receive our events. If not, we rely on the filter.
-        // Since we can't easily filter 'time_records' by 'company_id' (it's not on the table), 
-        // we'll rely on re-fetching logic triggered by UI actions for now, OR accept global events but only re-fetch if relevant.
-        // Actually, for now, let's just reload data on ANY record change. It's not ideal but better than full load.
-        // Refinement: meaningful scalability requires backend triggers or 'company_id' on time_records.
-        // For this refactor, let's keep it simple: Reload user data on record changes. RLS will protect the data stream later.
+        // Records updates (Any record change, let loadUserData filter)
         subs.push(supabase.channel('public:time_records')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'time_records' }, loadUserData)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'time_records' }, () => loadUserData())
           .subscribe());
 
       } else {
-        const employeeId = auth.user!.id;
-
         // My Employee Profile updates
-        subs.push(supabase.channel(`employee:${employeeId}`)
+        subs.push(supabase.channel(`employee:${userId}`)
           .on('postgres_changes',
-            { event: '*', schema: 'public', table: 'employees', filter: `id=eq.${employeeId}` },
+            { event: '*', schema: 'public', table: 'employees', filter: `id=eq.${userId}` },
             (payload) => setAuth(prev => ({ ...prev, user: payload.new as Employee }))
           ).subscribe());
 
         // My Records updates
-        subs.push(supabase.channel(`records:${employeeId}`)
+        subs.push(supabase.channel(`records:${userId}`)
           .on('postgres_changes',
-            { event: '*', schema: 'public', table: 'time_records', filter: `employee_id=eq.${employeeId}` },
-            loadUserData
+            { event: '*', schema: 'public', table: 'time_records', filter: `employee_id=eq.${userId}` },
+            () => loadUserData()
           ).subscribe());
       }
     };
@@ -233,7 +216,7 @@ const App: React.FC = () => {
     return () => {
       subs.forEach(sub => supabase.removeChannel(sub));
     };
-  }, [auth.user?.id, auth.role]);
+  }, [auth.user?.id, auth.role, loadUserData]);
 
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEYS.AUTH);
